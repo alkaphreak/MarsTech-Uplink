@@ -6,7 +6,8 @@ import java.util.concurrent.TimeUnit
 
 /** Checks whether a command is available in PATH. */
 fun commandExists(cmd: String): Boolean =
-    runCatching { ProcessBuilder("which", cmd).start().waitFor() == 0 }.getOrDefault(false)
+    runCatching { ProcessBuilder("which", cmd).start().waitFor() == 0 }
+        .getOrDefault(false)
 
 /**
  * Runs a command. Inside an async task (ThreadLocal buffer set), captures
@@ -66,7 +67,9 @@ fun RunContext.captureOutput(vararg cmd: String, timeoutSeconds: Long? = null): 
     val out = proc.inputStream.bufferedReader().readText().trim()
     if (timeoutSeconds != null) {
         val finished = proc.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-        if (!finished) { proc.destroyForcibly(); return@runCatching null }
+        if (!finished) {
+            proc.destroyForcibly(); return@runCatching null
+        }
     } else {
         proc.waitFor()
     }
@@ -79,23 +82,27 @@ data class ProcessResult(val exitCode: Int, val output: String)
 /** Runs a command, captures output and returns exit code.
  * @param timeoutSeconds if set, kills the process after the given number of seconds and returns exit code 124.
  */
-fun RunContext.runCaptured(vararg cmd: String, workDir: File? = null, timeoutSeconds: Long? = null): ProcessResult = runCatching {
-    val proc = ProcessBuilder(*cmd)
-        .redirectErrorStream(true)
-        .apply { workDir?.let { directory(it) } }
-        .start()
-    val out = proc.inputStream.bufferedReader().readText()
-    if (timeoutSeconds != null) {
-        val finished = proc.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-        if (!finished) {
-            proc.destroyForcibly()
-            return@runCatching ProcessResult(124, out + "\nWarning: '${cmd.first()}' timed out after ${timeoutSeconds}s — process killed")
+fun RunContext.runCaptured(vararg cmd: String, workDir: File? = null, timeoutSeconds: Long? = null): ProcessResult =
+    runCatching {
+        val proc = ProcessBuilder(*cmd)
+            .redirectErrorStream(true)
+            .apply { workDir?.let { directory(it) } }
+            .start()
+        val out = proc.inputStream.bufferedReader().readText()
+        if (timeoutSeconds != null) {
+            val finished = proc.waitFor(timeoutSeconds, TimeUnit.SECONDS)
+            if (!finished) {
+                proc.destroyForcibly()
+                return@runCatching ProcessResult(
+                    124,
+                    out + "\nWarning: '${cmd.first()}' timed out after ${timeoutSeconds}s — process killed"
+                )
+            }
+            ProcessResult(proc.exitValue(), out)
+        } else {
+            ProcessResult(proc.waitFor(), out)
         }
-        ProcessResult(proc.exitValue(), out)
-    } else {
-        ProcessResult(proc.waitFor(), out)
-    }
-}.getOrElse { e -> ProcessResult(1, "Error running ${cmd.first()}: ${e.message}") }
+    }.getOrElse { e -> ProcessResult(1, "Error running ${cmd.first()}: ${e.message}") }
 
 /**
  * Builds the tool-presence map by running all `which` checks in parallel.

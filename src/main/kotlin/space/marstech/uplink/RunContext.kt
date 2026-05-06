@@ -66,15 +66,15 @@ class RunContext(
      * immediately so entries appear in real-time regardless of buffer state.
      */
     fun bufPrint(msg: String = "") {
-        val buf = taskBuffer.get()
         logImmediate(msg)
+        val buf = taskBuffer.get()
         when {
             buf != null -> buf.appendLine(msg)
             else        -> println(msg)
         }
     }
 
-    /** Initialises the task buffer and label for the current thread. */
+    /** Initializes the task buffer and label for the current thread. */
     fun initTaskBuffer(label: String) {
         threadLabel.set(label)
         taskBuffer.set(StringBuilder())
