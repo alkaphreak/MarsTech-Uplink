@@ -13,7 +13,7 @@ import java.io.File
  */
 data class AppConfig(
     // [paths]
-    val repoRoot: String,
+    val shellSnapshotDir: String,
     val keewebSource: String,
     val keewebBackupDir: String,
     // [backups]
@@ -26,9 +26,9 @@ data class AppConfig(
         fun defaults(): AppConfig {
             val home = Config.HOME
             return AppConfig(
-                repoRoot = "$home/IdeaProjects/Marstech-Configs",
-                keewebSource = "$home/Dropbox/Alkaphreak.kdbx",
-                keewebBackupDir = "$home/Sync/Backup/Apps/KeeWeb",
+                shellSnapshotDir = "$home/MyWorkspace/My-Configs",
+                keewebSource = "$home/KeeWeb/myKeeweb.kdbx",
+                keewebBackupDir = "$home/Backup/Apps/KeeWeb",
                 shellSnapshotRetention = 3,
                 keewebRetention = 5,
             )
@@ -38,13 +38,14 @@ data class AppConfig(
             |# marstech-uplink configuration
             |# ~/Library/Application Support/marstech/marstech-uplink/config.toml
             |#
-            |# Paths support ~ expansion (e.g. ~/Dropbox/…).
+            |# Paths support ~ expansion (e.g. ~/MyWorkspace/…).
             |# Changes take effect on the next run — no restart needed.
             |
             |[paths]
-            |repo_root          = "~/IdeaProjects/Marstech-Configs"
-            |keeweb_source      = "~/Dropbox/Alkaphreak.kdbx"
-            |keeweb_backup_dir  = "~/Sync/Backup/Apps/KeeWeb"
+            |# Folder where to backup .profile and .zhsrc files
+            |shell_snapshot_dir = "~/MyWorkspace/My-Configs"
+            |keeweb_source      = "~/KeeWeb/myKeeweb.kdbx"
+            |keeweb_backup_dir  = "~/Backup/Apps/KeeWeb"
             |
             |[backups]
             |# Number of shell-config snapshots to keep per device
@@ -54,19 +55,19 @@ data class AppConfig(
         """.trimMargin()
 
         /**
-         * Reads the config file and returns the resolved [AppConfig].
-         * Creates the file with defaults when absent.
+         * Reads the config file and returns a [Pair] of ([AppConfig], wasJustCreated).
+         * Creates the file with defaults when absent — wasJustCreated is true in that case.
          * Falls back to [defaults] on any parse error — never throws.
          */
-        fun load(file: File): AppConfig {
+        fun loadWithMeta(file: File): Pair<AppConfig, Boolean> {
             if (!file.exists()) {
                 runCatching {
                     file.parentFile?.mkdirs()
                     file.writeText(DEFAULT_TOML)
                 }
-                return defaults()
+                return Pair(defaults(), true)
             }
-            return runCatching { parse(file) }.getOrElse { defaults() }
+            return Pair(runCatching { parse(file) }.getOrElse { defaults() }, false)
         }
 
         // -----------------------------------------------------------------
@@ -103,7 +104,7 @@ data class AppConfig(
 
             val d = defaults()
             return AppConfig(
-                repoRoot                 = str("paths.repo_root",              d.repoRoot),
+                shellSnapshotDir               = str("paths.shell_snapshot_dir",       d.shellSnapshotDir),
                 keewebSource             = str("paths.keeweb_source",          d.keewebSource),
                 keewebBackupDir          = str("paths.keeweb_backup_dir",      d.keewebBackupDir),
                 shellSnapshotRetention   = int("backups.shell_snapshot_retention", d.shellSnapshotRetention),

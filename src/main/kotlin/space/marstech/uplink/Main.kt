@@ -101,7 +101,18 @@ class MacUpdateCommand : Callable<Int> {
         println("$BOLD$CYAN  Host    : ${Config.cachedDeviceName}       $RESET")
         println("$BOLD$CYAN##############################################$RESET")
         println()
+
+        if (Config.configWasCreated) {
+            println("$YELLOW${BOLD}  ★  Config file created for the first time:$RESET")
+            println("$YELLOW     ${Config.configFile.absolutePath}$RESET")
+            println("$YELLOW     Edit it to customise paths and retention settings.$RESET")
+        } else {
+            println("$CYAN  Config: ${Config.configFile.absolutePath}$RESET")
+        }
+        println()
+
         Config.appendLog("Started: ${Config.dateStr} | Host: ${Config.cachedDeviceName}\n")
+        Config.appendLog("Config:  ${Config.configFile.absolutePath} (created=${Config.configWasCreated})\n")
     }
 
     @Suppress("SameReturnValue")

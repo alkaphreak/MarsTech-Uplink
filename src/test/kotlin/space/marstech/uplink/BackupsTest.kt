@@ -23,9 +23,9 @@ class BackupsTest {
     }
 
     @Test
-    fun `backupKeewebDb skips when Dropbox source does not exist`() {
+    fun `backupKeewebDb skips when source does not exist`() {
         val ctx = RunContext(dryRun = false)
-        // The Dropbox source won't exist on a CI machine or a clean environment
+        // The configured keewebSource (default: ~/KeeWeb/myKeeweb.kdbx) won't exist in CI
         ctx.backupKeewebDb()
         // Either skipped (source missing) or updated (source exists on dev machine)
         val handled = ctx.summarySkipped.any { it.contains("KeeWeb") } ||

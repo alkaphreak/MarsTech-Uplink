@@ -23,8 +23,9 @@
 - Keep CLI-facing strings explicit and operational; this tool is closer to an automation script than a domain model.
 
 ## Filesystem and external integration points
-- `Config.kt` hard-codes `Config.repoRoot` to `~/IdeaProjects/Marstech-Configs`; shell snapshots are written under `confs/snapshots/...` there.
-- KeeWeb backups copy `~/Dropbox/Alkaphreak.kdbx` to `~/Sync/Backup/Apps/KeeWeb` (`Backups.kt`). This project has real machine-specific path coupling.
+- `Config.repoRoot` resolves through `AppConfig` (loaded from the user config file); shell snapshots are written under `confs/snapshots/...` relative to that root.
+- KeeWeb source and backup destination are configured via `AppConfig.keewebSource` / `AppConfig.keewebBackupDir`; paths default to `~/KeeWeb/myKeeweb.kdbx` and `~/Backup/Apps/KeeWeb`.
+- User config file: `~/Library/Application Support/marstech/marstech-uplink/config.toml` — auto-created with placeholder defaults on first run. See `AppConfig.kt` for all keys.
 - Logs are always appended to `~/Library/Logs/marstech/marstech-uplink/marstech-uplink-YYYY-MM-DD.log`.
 - External commands currently orchestrated include: `brew`, `sdk`, `npm`/`node`, `uv`, `rustup`, `pipx`, `gh`, `softwareupdate`, `mas`, `omz`, `zsh`, `osascript`, `scutil`, and `hostname`.
 - ANSI colors are centralized in `Colors.kt` and rely on Jansi setup/teardown in `Main.kt`; do not add manual TTY detection.
@@ -39,7 +40,8 @@
 - Use `--dry-run` and `--only <tool>` for safe debugging of one updater without touching the full machine.
 
 ## Non-obvious caveats
-- Tests are smoke-level, not hermetic. `BackupsTest.backupKeewebDb()` may copy the real KeeWeb database if it exists on the current machine.
+- Tests are smoke-level, not hermetic. `BackupsTest.backupKeewebDb()` may copy a real KeeWeb database if the configured source path exists on the current machine.
+- Config paths in `AppConfig` default to generic placeholders (`~/KeeWeb/…`, `~/MyWorkspace/…`); the real paths are user-defined in `config.toml`.
 - `macosUpdate()` dry-run still calls `softwareupdate --list`; under Surefire this emits a known `Corrupted channel by directly writing to native stream` warning in `target/surefire-reports/*.dumpstream`.
 - Running the fat JAR on Java 25 shows Jansi native-access warnings; they are environmental, not Kotlin compile failures.
 - Ignore `target/` for source edits; the real implementation lives only under `src/main/kotlin` and `src/test/kotlin`.

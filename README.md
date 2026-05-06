@@ -81,6 +81,34 @@ src/main/kotlin/space/marstech/uplink/
 | Native    | GraalVM native-maven-plugin  |
 | Testing   | JUnit 5 + Mockito-Kotlin     |
 
+## Configuration
+
+On the first run, marstech-uplink creates a config file at:
+
+```
+~/Library/Application Support/marstech/marstech-uplink/config.toml
+```
+
+Edit it to set your actual paths:
+
+```toml
+[paths]
+# Folder where .profile and .zshrc snapshots are stored
+shell_snapshot_dir = "~/MyWorkspace/My-Configs"
+# KeePass database to back up
+keeweb_source      = "~/KeeWeb/myKeeweb.kdbx"
+# Destination folder for KeeWeb backups
+keeweb_backup_dir  = "~/Backup/Apps/KeeWeb"
+
+[backups]
+# Number of shell-config snapshots to keep per device
+shell_snapshot_retention = 3
+# Number of KeeWeb database backups to keep
+keeweb_retention         = 5
+```
+
+Changes take effect immediately on the next run — no restart needed.
+
 ## Log file
 
 `~/Library/Logs/marstech/marstech-uplink/marstech-uplink-YYYY-MM-DD.log`

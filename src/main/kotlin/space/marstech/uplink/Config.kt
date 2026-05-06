@@ -20,11 +20,21 @@ object Config {
         File("$HOME/Library/Application Support/marstech/marstech-uplink/config.toml")
     }
 
-    /** Lazily loaded user configuration. See [AppConfig] for all available keys. */
-    val appConfig: AppConfig by lazy { AppConfig.load(configFile) }
+    /**
+     * Lazily loaded user configuration. See [AppConfig] for all available keys.
+     * The pair carries (config, wasJustCreated) — evaluated once on first access.
+     */
+    private val configLoadResult: Pair<AppConfig, Boolean> by lazy {
+        AppConfig.loadWithMeta(configFile)
+    }
+
+    val appConfig: AppConfig get() = configLoadResult.first
+
+    /** True only on the very first run, when the config file did not yet exist. */
+    val configWasCreated: Boolean get() = configLoadResult.second
 
     /** Convenience shorthand — resolved through [appConfig]. */
-    val repoRoot: String get() = appConfig.repoRoot
+    val repoRoot: String get() = appConfig.shellSnapshotDir
 
     private val ANSI_PATTERN = Regex("\u001B\\[[0-9;]*[mKJHFA-Za-z]")
     private val TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss")
