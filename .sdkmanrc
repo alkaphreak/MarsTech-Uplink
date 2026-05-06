@@ -1,0 +1,13 @@
+# .sdkmanrc — SDKMAN! candidate versions for Marstech-Configs
+# Generated: 2026-04-24
+#
+# Usage:
+#   sdk env install   — install all candidates listed here
+#   sdk env           — switch to the versions listed here
+#   sdk env clear     — revert to default versions
+#
+# GraalVM CE (graalce) is required for --native-install / --native-update in mac-update.main.kts
+# It bundles native-image; no separate 'gu install native-image' step needed on 22+.
+
+java=25.0.1-graalce
+kotlin=2.3.21
