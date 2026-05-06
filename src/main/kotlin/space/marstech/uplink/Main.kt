@@ -16,21 +16,21 @@ import java.util.concurrent.Executors
 import kotlin.system.exitProcess
 
 @Command(
-    name = "mac-update",
+    name = "marstech-uplink",
     description = ["Updates all development tools, packages, and system software on macOS."],
     mixinStandardHelpOptions = true,
-    version = ["mac-update 1.0.0"],
+    version = ["marstech-uplink 1.0.0"],
     footer = [
         "",
         "Tools for --only: brew  sdkman  npm  uv  codex  rustup  pipx  gh  macos  mas  ohmyzsh",
         "",
         "Examples:",
-        "  mac-update",
-        "  mac-update --dry-run",
-        "  mac-update --only brew",
-        "  mac-update --backup-only",
+        "  marstech-uplink",
+        "  marstech-uplink --dry-run",
+        "  marstech-uplink --only brew",
+        "  marstech-uplink --backup-only",
         "",
-        "Log file: ~/Library/Logs/marstech/mac-update/mac-update-YYYY-MM-DD.log",
+        "Log file: ~/Library/Logs/marstech/marstech-uplink/marstech-uplink-YYYY-MM-DD.log",
     ]
 )
 class MacUpdateCommand : Callable<Int> {
@@ -96,7 +96,7 @@ class MacUpdateCommand : Callable<Int> {
     private fun printStartBanner() {
         println()
         println("$BOLD$CYAN##############################################$RESET")
-        println("$BOLD$CYAN  mac-update — macOS System Update Script   $RESET")
+        println("$BOLD$CYAN  marstech-uplink — macOS System Update Script $RESET")
         println("$BOLD$CYAN  Started : ${Config.dateStr}                $RESET")
         println("$BOLD$CYAN  Host    : ${Config.cachedDeviceName}       $RESET")
         println("$BOLD$CYAN##############################################$RESET")
@@ -111,7 +111,7 @@ class MacUpdateCommand : Callable<Int> {
         val elapsed = formatElapsed(System.currentTimeMillis() - ctx.startTimeMs)
         println()
         println("$BOLD===============================================$RESET")
-        println("${GREEN}${BOLD}  mac-update BACKUP-ONLY COMPLETED           $RESET")
+        println("${GREEN}${BOLD}  marstech-uplink BACKUP-ONLY COMPLETED       $RESET")
         println("$BOLD  Finished in $elapsed$RESET")
         println("$BOLD===============================================$RESET")
         println()

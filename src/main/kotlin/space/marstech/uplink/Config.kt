@@ -14,7 +14,17 @@ object Config {
 
     val HOME: String = System.getenv("HOME") ?: error("HOME environment variable not set")
     val dateStr: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-    val repoRoot: String = "$HOME/IdeaProjects/Marstech-Configs"
+
+    /** User config file — created with defaults on first run if absent. */
+    val configFile: File by lazy {
+        File("$HOME/Library/Application Support/marstech/marstech-uplink/config.toml")
+    }
+
+    /** Lazily loaded user configuration. See [AppConfig] for all available keys. */
+    val appConfig: AppConfig by lazy { AppConfig.load(configFile) }
+
+    /** Convenience shorthand — resolved through [appConfig]. */
+    val repoRoot: String get() = appConfig.repoRoot
 
     private val ANSI_PATTERN = Regex("\u001B\\[[0-9;]*[mKJHFA-Za-z]")
     private val TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss")
@@ -23,12 +33,12 @@ object Config {
     /** Strips all ANSI escape sequences from a string. */
     fun stripAnsi(text: String): String = ANSI_PATTERN.replace(text, "")
 
-    // Log file — ~/Library/Logs/marstech/mac-update/mac-update-YYYY-MM-DD.log
+    // Log file — ~/Library/Logs/marstech/marstech-uplink/marstech-uplink-YYYY-MM-DD.log
     val logFile: File by lazy {
-        val dir = File("$HOME/Library/Logs/marstech/mac-update")
+        val dir = File("$HOME/Library/Logs/marstech/marstech-uplink")
         dir.mkdirs()
-        File(dir, "mac-update-$dateStr.log").also { f ->
-            f.writeText("=== mac-update log — $dateStr ===\n\n")
+        File(dir, "marstech-uplink-$dateStr.log").also { f ->
+            f.writeText("=== marstech-uplink log — $dateStr ===\n\n")
         }
     }
 

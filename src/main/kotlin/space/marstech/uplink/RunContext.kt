@@ -4,7 +4,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Holds configuration and mutable state for a single mac-update run.
+ * Holds configuration and mutable state for a single marstech-uplink run.
  * Passed by reference to all updater components.
  */
 class RunContext(

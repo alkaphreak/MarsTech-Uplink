@@ -25,7 +25,7 @@
 ## Filesystem and external integration points
 - `Config.kt` hard-codes `Config.repoRoot` to `~/IdeaProjects/Marstech-Configs`; shell snapshots are written under `confs/snapshots/...` there.
 - KeeWeb backups copy `~/Dropbox/Alkaphreak.kdbx` to `~/Sync/Backup/Apps/KeeWeb` (`Backups.kt`). This project has real machine-specific path coupling.
-- Logs are always appended to `~/Library/Logs/marstech/mac-update/mac-update-YYYY-MM-DD.log`.
+- Logs are always appended to `~/Library/Logs/marstech/marstech-uplink/marstech-uplink-YYYY-MM-DD.log`.
 - External commands currently orchestrated include: `brew`, `sdk`, `npm`/`node`, `uv`, `rustup`, `pipx`, `gh`, `softwareupdate`, `mas`, `omz`, `zsh`, `osascript`, `scutil`, and `hostname`.
 - ANSI colors are centralized in `Colors.kt` and rely on Jansi setup/teardown in `Main.kt`; do not add manual TTY detection.
 
@@ -33,9 +33,9 @@
 - Verified test command: `mvn test`.
 - Common build commands from the repo:
   - `mvn verify`
-  - `mvn package` -> produces `target/mac-update.jar`
+  - `mvn package` -> produces `target/marstech-uplink.jar`
   - `mvn -Pnative package` -> GraalVM native binary build
-- Verified smoke test for the packaged CLI: `java -jar target/mac-update.jar --dry-run --only brew`.
+- Verified smoke test for the packaged CLI: `java -jar target/marstech-uplink.jar --dry-run --only brew`.
 - Use `--dry-run` and `--only <tool>` for safe debugging of one updater without touching the full machine.
 
 ## Non-obvious caveats

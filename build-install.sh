@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 # build-install.sh
-# Builds the mac-update GraalVM native binary and installs it to ~/.local/bin.
+# Builds the marstech-uplink GraalVM native binary and installs it to ~/.local/bin.
 
 set -eo pipefail  # Note: -u is intentionally omitted here; sdkman-init.sh uses unset variables
 
@@ -29,7 +29,7 @@ echo "    Using Java : $(java -version 2>&1 | head -1)"
 echo "    JAVA_HOME  : ${JAVA_HOME}"
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BINARY_NAME="mac-update"
+BINARY_NAME="marstech-uplink"
 TARGET_BIN="${PROJECT_DIR}/target/${BINARY_NAME}"
 INSTALL_DIR="${HOME}/.local/bin"
 INSTALL_PATH="${INSTALL_DIR}/${BINARY_NAME}"

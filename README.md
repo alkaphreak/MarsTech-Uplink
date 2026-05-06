@@ -12,11 +12,11 @@ macOS system updater — Kotlin/Maven CLI tool compiled to a GraalVM native bina
 ## Usage
 
 ```zsh
-mac-update                 # Run all updates
-mac-update --dry-run       # Preview actions without executing
-mac-update --only brew     # Run a single updater
-mac-update --backup-only   # Backup shell configs and KeeWeb only
-mac-update --help
+marstech-uplink                 # Run all updates
+marstech-uplink --dry-run       # Preview actions without executing
+marstech-uplink --only brew     # Run a single updater
+marstech-uplink --backup-only   # Backup shell configs and KeeWeb only
+marstech-uplink --help
 ```
 
 ### Tools for `--only`
@@ -43,7 +43,7 @@ mvn verify
 
 # Fat JAR
 mvn package
-java -jar target/mac-update.jar --dry-run
+java -jar target/marstech-uplink.jar --dry-run
 
 # GraalVM native binary — requires GraalVM JDK with native-image
 mvn -Pnative package
@@ -52,7 +52,7 @@ mvn -Pnative package
 ## Install native binary
 
 ```zsh
-mvn -Pnative package && cp target/mac-update ~/.local/bin/mac-update && chmod +x ~/.local/bin/mac-update
+mvn -Pnative package && cp target/marstech-uplink ~/.local/bin/marstech-uplink && chmod +x ~/.local/bin/marstech-uplink
 ```
 
 ## Project structure
@@ -83,9 +83,9 @@ src/main/kotlin/space/marstech/uplink/
 
 ## Log file
 
-`~/Library/Logs/marstech/mac-update/mac-update-YYYY-MM-DD.log`
+`~/Library/Logs/marstech/marstech-uplink/marstech-uplink-YYYY-MM-DD.log`
 
 ## Related
 
-- Source `.kts` (being retired): `Marstech-Configs/scripts/Mac/mac-update.main.kts`
+- Source `.kts` (being retired): `Marstech-Configs/scripts/Mac/marstech-uplink.main.kts`
 - YouTrack: MARSTECH-635

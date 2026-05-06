@@ -39,7 +39,7 @@ fun RunContext.printSummary() {
     printCompletionBanner(elapsed, hasFailed)
 
     if (!dryRun) sendNotification(
-        title = if (hasFailed) "mac-update: Failures" else "mac-update: Done",
+        title = if (hasFailed) "marstech-uplink: Failures" else "marstech-uplink: Done",
         message = buildNotificationMessage(elapsed, hasFailed)
     )
 
@@ -83,9 +83,9 @@ private fun printCompletionBanner(elapsed: String, hasFailed: Boolean) {
     println()
     println("$BOLD===============================================$RESET")
     if (hasFailed)
-        println("${RED}${BOLD}  mac-update COMPLETED WITH FAILURES        $RESET")
+        println("${RED}${BOLD}  marstech-uplink COMPLETED WITH FAILURES     $RESET")
     else
-        println("${GREEN}${BOLD}  mac-update COMPLETED SUCCESSFULLY         $RESET")
+        println("${GREEN}${BOLD}  marstech-uplink COMPLETED SUCCESSFULLY      $RESET")
     println("$BOLD  Finished in $elapsed$RESET")
     println("$BOLD===============================================$RESET")
     println("$CYAN  Log: ${Config.logFile.absolutePath}$RESET")

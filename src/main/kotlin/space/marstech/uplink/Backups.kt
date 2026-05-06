@@ -36,13 +36,13 @@ fun RunContext.backupShellConfigs() {
     saveWithHeader(File("${Config.HOME}/.profile"), "profile.sh")
     saveWithHeader(File("${Config.HOME}/.zshrc"), "zshrc.sh")
 
-    // Rotate: keep only the 3 most recent snapshots for this device
+    // Rotate: keep only the N most recent snapshots for this device
     val snapshotsDir = File("${Config.repoRoot}/confs/snapshots")
     if (snapshotsDir.isDirectory) {
         snapshotsDir
             .listFiles { f -> f.isDirectory && f.name.endsWith("-$deviceName") }
             ?.sortedDescending()
-            ?.drop(3)
+            ?.drop(Config.appConfig.shellSnapshotRetention)
             ?.forEach { old -> old.deleteRecursively(); bufPrint("Deleted: ${old.absolutePath}") }
     }
     summaryUpdated += "Shell config backup"
@@ -52,9 +52,9 @@ private const val KEE_WEB_BACKUP = "KeeWeb backup"
 
 fun RunContext.backupKeewebDb() {
     section("Backing up KeePass database (KeeWeb)")
-    val src = File("${Config.HOME}/Dropbox/Alkaphreak.kdbx")
-    val destDir = File("${Config.HOME}/Sync/Backup/Apps/KeeWeb")
-    val dest = File(destDir, "${Config.dateStr}-Alkaphreak.kdbx")
+    val src     = File(Config.appConfig.keewebSource)
+    val destDir = File(Config.appConfig.keewebBackupDir)
+    val dest    = File(destDir, "${Config.dateStr}-${src.name}")
 
     if (!src.exists()) {
         bufPrint("Warning: ${src.absolutePath} not found, skipping KeeWeb backup")
@@ -78,8 +78,8 @@ fun RunContext.backupKeewebDb() {
         }
     summaryUpdated += KEE_WEB_BACKUP
 
-    // Retain only the 5 most recent backups
-    destDir.listFiles { f -> f.isFile && f.name.endsWith("-Alkaphreak.kdbx") }
-        ?.sortedDescending()?.drop(5)
+    // Retain only the N most recent backups
+    destDir.listFiles { f -> f.isFile && f.name.endsWith("-${src.name}") }
+        ?.sortedDescending()?.drop(Config.appConfig.keewebRetention)
         ?.forEach { old -> old.delete(); bufPrint("Deleted old backup: ${old.absolutePath}") }
 }
