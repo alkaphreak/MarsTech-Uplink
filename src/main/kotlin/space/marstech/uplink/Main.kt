@@ -154,10 +154,18 @@ class MacUpdateCommand : Callable<Int> {
 
     private fun runBackups(ctx: RunContext, executor: Executor) {
         phaseHeader(1, "Backups")
-        CompletableFuture.allOf(
-            ctx.launchAsync("backup-shells", executor, ctx::backupShellConfigs),
-            ctx.launchAsync("backup-keeweb", executor, ctx::backupKeewebDb)
-        ).join()
+        val futures = buildList {
+            if (Config.appConfig.tools.backupShells)
+                add(ctx.launchAsync("backup-shells", executor, ctx::backupShellConfigs))
+            else
+                ctx.summarySkipped += "Shell config backup (disabled in config)"
+
+            if (Config.appConfig.tools.backupKeeweb)
+                add(ctx.launchAsync("backup-keeweb", executor, ctx::backupKeewebDb))
+            else
+                ctx.summarySkipped += "KeeWeb backup (disabled in config)"
+        }
+        CompletableFuture.allOf(*futures.toTypedArray()).join()
     }
 
     private fun runUpdaters(ctx: RunContext, executor: Executor) {

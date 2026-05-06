@@ -39,9 +39,18 @@ class RunContext(
      */
     internal val threadLabel = ThreadLocal<String>()
 
-    /** Returns true when no --only filter is active, or when the tool matches it. */
-    fun shouldRun(tool: String): Boolean =
-        onlyTool == null || onlyTool.equals(tool, ignoreCase = true)
+    /**
+     * Returns true when the tool should be executed this run.
+     *
+     * Rules (in priority order):
+     * 1. If `--only <tool>` is specified and matches → always run (CLI overrides config).
+     * 2. If `--only <tool>` is specified but does NOT match → skip.
+     * 3. If no `--only` filter → run only if the tool is enabled in config.toml.
+     */
+    fun shouldRun(tool: String): Boolean {
+        if (onlyTool != null) return onlyTool.equals(tool, ignoreCase = true)
+        return Config.appConfig.tools.isEnabled(tool)
+    }
 
     /** Returns cached tool-presence result; falls back to a live check if the key is unknown. */
     fun toolPresent(cmd: String): Boolean =
