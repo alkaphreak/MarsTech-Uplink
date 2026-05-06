@@ -124,8 +124,8 @@ class MacUpdateCommand : Callable<Int> {
         if (ctx.onlyTool == null) {
             phaseHeader(1, "Backups")
             CompletableFuture.allOf(
-                ctx.launchAsync("backupShellConfigs", executor, ctx::backupShellConfigs),
-                ctx.launchAsync("backupKeewebDb", executor, ctx::backupKeewebDb)
+                ctx.launchAsync("backup-shells", executor, ctx::backupShellConfigs),
+                ctx.launchAsync("backup-keeweb", executor, ctx::backupKeewebDb)
             ).join()
         }
 
@@ -139,7 +139,7 @@ class MacUpdateCommand : Callable<Int> {
         val updateFutures = mutableListOf<CompletableFuture<Void>>()
 
         if (ctx.shouldRun("brew") || ctx.shouldRun("codex")) {
-            updateFutures += ctx.launchAsync("brew+codex", executor) {
+            updateFutures += ctx.launchAsync("brew", executor) {
                 if (ctx.toolPresent("brew")) {
                     if (ctx.shouldRun("brew"))  ctx.brewUpdate()
                     if (ctx.shouldRun("codex")) ctx.codexUpdate()
@@ -149,21 +149,21 @@ class MacUpdateCommand : Callable<Int> {
                 }
             }
         }
-        if (ctx.shouldRun("sdkman")) updateFutures += ctx.launchAsync("sdkmanUpdate", executor, ctx::sdkmanUpdate)
-        if (ctx.shouldRun("uv"))     updateFutures += ctx.launchAsync("uvUpdate", executor, ctx::uvUpdate)
-        if (ctx.shouldRun("npm")) updateFutures += ctx.launchAsync("npmUpdate", executor) {
+        if (ctx.shouldRun("sdkman")) updateFutures += ctx.launchAsync("sdkman",  executor, ctx::sdkmanUpdate)
+        if (ctx.shouldRun("uv"))     updateFutures += ctx.launchAsync("uv",      executor, ctx::uvUpdate)
+        if (ctx.shouldRun("npm")) updateFutures += ctx.launchAsync("npm", executor) {
             if (ctx.toolPresent("npm")) ctx.npmUpdate() else ctx.summarySkipped += "NPM (not installed)"
         }
-        if (ctx.shouldRun("rustup")) updateFutures += ctx.launchAsync("rustupUpdate", executor, ctx::rustupUpdate)
-        if (ctx.shouldRun("pipx"))   updateFutures += ctx.launchAsync("pipxUpdate", executor, ctx::pipxUpdate)
-        if (ctx.shouldRun("gh"))     updateFutures += ctx.launchAsync("ghExtUpdate", executor, ctx::ghExtUpdate)
-        if (ctx.shouldRun("macos")) updateFutures += ctx.launchAsync("macosUpdate", executor) {
+        if (ctx.shouldRun("rustup")) updateFutures += ctx.launchAsync("rustup",  executor, ctx::rustupUpdate)
+        if (ctx.shouldRun("pipx"))   updateFutures += ctx.launchAsync("pipx",    executor, ctx::pipxUpdate)
+        if (ctx.shouldRun("gh"))     updateFutures += ctx.launchAsync("gh",      executor, ctx::ghExtUpdate)
+        if (ctx.shouldRun("macos")) updateFutures += ctx.launchAsync("macos", executor) {
             if (ctx.toolPresent("softwareupdate")) ctx.macosUpdate()
         }
-        if (ctx.shouldRun("mas")) updateFutures += ctx.launchAsync("masUpdate", executor) {
+        if (ctx.shouldRun("mas")) updateFutures += ctx.launchAsync("mas", executor) {
             if (ctx.toolPresent("mas")) ctx.masUpdate() else ctx.summarySkipped += "Mac App Store (mas not installed)"
         }
-        if (ctx.shouldRun("ohmyzsh")) updateFutures += ctx.launchAsync("ohmyzshUpdate", executor, ctx::ohmyzshUpdate)
+        if (ctx.shouldRun("ohmyzsh")) updateFutures += ctx.launchAsync("ohmyzsh", executor, ctx::ohmyzshUpdate)
 
         CompletableFuture.allOf(*updateFutures.toTypedArray()).join()
         executor.shutdown()
@@ -183,7 +183,7 @@ fun RunContext.launchAsync(
     executor: Executor,
     block: () -> Unit,
 ): CompletableFuture<Void> = CompletableFuture.runAsync({
-    initTaskBuffer()
+    initTaskBuffer(label)
     try {
         block()
     } catch (e: Exception) {

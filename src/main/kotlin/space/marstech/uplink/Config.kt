@@ -1,7 +1,9 @@
 package space.marstech.uplink
 
 import java.io.File
+import java.io.PrintWriter
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 /**
@@ -14,6 +16,13 @@ object Config {
     val dateStr: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
     val repoRoot: String = "$HOME/IdeaProjects/Marstech-Configs"
 
+    private val ANSI_PATTERN = Regex("\u001B\\[[0-9;]*[mKJHFA-Za-z]")
+    private val TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss")
+    private const val LABEL_WIDTH = 12
+
+    /** Strips all ANSI escape sequences from a string. */
+    fun stripAnsi(text: String): String = ANSI_PATTERN.replace(text, "")
+
     // Log file — ~/Library/Logs/marstech/mac-update/mac-update-YYYY-MM-DD.log
     val logFile: File by lazy {
         val dir = File("$HOME/Library/Logs/marstech/mac-update")
@@ -23,19 +32,43 @@ object Config {
         }
     }
 
+    /**
+     * PrintWriter opened in append mode with autoFlush.
+     * Used for real-time structured log output.
+     * Initialised after [logFile] so the header is written first.
+     */
+    val logWriter: PrintWriter by lazy {
+        PrintWriter(logFile.bufferedWriter().let { java.io.BufferedWriter(java.io.FileWriter(logFile, true)) }, true)
+    }
+
+    /**
+     * Writes a single log line immediately with timestamp and tool label.
+     * Multi-line messages are split and each line is written separately.
+     * ANSI codes are stripped.
+     */
+    fun logLine(label: String, message: String) {
+        val time = LocalTime.now().format(TIME_FMT)
+        val paddedLabel = label.padEnd(LABEL_WIDTH).take(LABEL_WIDTH)
+        val cleaned = stripAnsi(message)
+        runCatching {
+            synchronized(logWriter) {
+                cleaned.lines().forEach { line ->
+                    logWriter.println("[$time] [$paddedLabel] $line")
+                }
+            }
+        }
+    }
+
+    /** Appends raw unstructured text to the log (used for phase headers and summary). */
     fun appendLog(text: String) = runCatching { logFile.appendText(text) }.getOrElse {}
 
     /**
-     * macOS computer name, sanitised for use as a filename segment.
+     * macOS computer name, sanitized for use as a filename segment.
      * Cached to avoid repeated scutil subprocess forks.
      */
     val cachedDeviceName: String by lazy {
-        val raw = captureSimple("scutil", "--get", "ComputerName")
-            ?: captureSimple("hostname", "-s")
-            ?: "unknown"
-        raw.replace(' ', '-')
-            .replace(Regex("[^a-zA-Z0-9\\-._]"), "")
-            .lowercase()
+        val raw = captureSimple("scutil", "--get", "ComputerName") ?: captureSimple("hostname", "-s") ?: "unknown"
+        raw.replace(' ', '-').replace(Regex("[^a-zA-Z0-9\\-._]"), "").lowercase()
     }
 
     /** Runs a command and returns trimmed stdout, or null on failure or empty output. */

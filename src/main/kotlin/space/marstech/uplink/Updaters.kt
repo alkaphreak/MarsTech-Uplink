@@ -364,7 +364,7 @@ fun RunContext.macosUpdate() {
         return
     }
 
-    val result = runCaptured("softwareupdate", "--install", "--all")
+    val result = runCaptured("softwareupdate", "--install", "--all", timeoutSeconds = 1800) // 30 min max
     bufPrint(result.output)
 
     if (result.exitCode != 0) {
@@ -393,7 +393,7 @@ fun RunContext.masUpdate() {
         return
     }
 
-    runProcess("mas", "upgrade") // non-zero is non-fatal
+    runProcess("mas", "upgrade", timeoutSeconds = 600) // 10 min max — mas can hang waiting for App Store auth
     summaryUpdated += "Mac App Store"
 }
 
@@ -417,7 +417,7 @@ fun RunContext.ohmyzshUpdate() {
 
     val exitCode = if (toolPresent("omz")) {
         bufPrint("Using: omz update")
-        runProcess("zsh", "-c", "omz update --unattended")
+        runProcess("zsh", "-c", "omz update --unattended", timeoutSeconds = 300) // 5 min max
     } else {
         val upgradeScript = File(zshDir, "tools/upgrade.sh")
         if (!upgradeScript.exists()) {
@@ -426,7 +426,7 @@ fun RunContext.ohmyzshUpdate() {
             return
         }
         bufPrint("Using: zsh ${upgradeScript.absolutePath}")
-        runProcess("zsh", upgradeScript.absolutePath)
+        runProcess("zsh", upgradeScript.absolutePath, timeoutSeconds = 300) // 5 min max
     }
 
     if (exitCode != 0) {
