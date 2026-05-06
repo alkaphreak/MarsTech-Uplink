@@ -8,115 +8,130 @@ import java.util.concurrent.CompletableFuture
 
 fun RunContext.brewUpdate() {
     section("Homebrew update")
-
     if (dryRun) {
-        bufPrint("[DRY-RUN] Would run: brew update")
-        bufPrint("[DRY-RUN] Would show: brew outdated --verbose")
-        bufPrint("[DRY-RUN] Would run: brew upgrade --greedy")
-        bufPrint("[DRY-RUN] Would run: brew cleanup -s --prune=all")
-        bufPrint("[DRY-RUN] Would run: brew doctor")
-        bufPrint("[DRY-RUN] Would link any unlinked kegs")
-        summaryUpdated += "Homebrew"
-        return
+        brewDryRun(); return
     }
 
     // Run 'brew outdated' concurrently with 'brew update' — both are read-only
-    val outdatedFuture = CompletableFuture.supplyAsync {
-        captureOutput("brew", "outdated", "--verbose")
-    }
-
+    val outdatedFuture = CompletableFuture.supplyAsync { captureOutput("brew", "outdated", "--verbose") }
     val updateResult = runCaptured("brew", "update")
     bufPrint(updateResult.output)
 
     if (updateResult.exitCode != 0) {
         outdatedFuture.cancel(true)
-        if (updateResult.output.contains("already locked", ignoreCase = true) ||
-            updateResult.output.contains("Another `brew update` process", ignoreCase = true) ||
-            updateResult.output.contains("Another brew update", ignoreCase = true)) {
-            bufPrint("${YELLOW}Homebrew: another update process is already running — skipping.$RESET")
-            bufPrint("Wait for it to finish, or remove the lock:")
-            bufPrint("  rm -f \$(brew --prefix)/var/homebrew/locks/update")
-            summaryWarnings += "Homebrew skipped: lock contention (another brew update was running)"
-        } else {
-            bufPrint("${RED}Warning: Homebrew update failed (exit ${updateResult.exitCode})$RESET")
-            summaryFailed += "Homebrew"
-        }
+        handleBrewUpdateFailure(updateResult)
         return
     }
 
     section("Homebrew — outdated packages")
     val outdated = runCatching { outdatedFuture.get() }.getOrNull()
-    if (outdated.isNullOrBlank()) bufPrint("All Homebrew packages are up to date")
-    else bufPrint(outdated)
+    bufPrint(outdated.takeUnless { it.isNullOrBlank() } ?: "All Homebrew packages are up to date")
 
+    val upgradeExit = brewUpgrade()
+    brewCleanupAndDoctor(upgradeExit)
+    brewLinkUnlinkedKegs()
+    summaryUpdated += "Homebrew"
+}
+
+private fun RunContext.brewDryRun() {
+    bufPrint("[DRY-RUN] Would run: brew update")
+    bufPrint("[DRY-RUN] Would show: brew outdated --verbose")
+    bufPrint("[DRY-RUN] Would run: brew upgrade --greedy")
+    bufPrint("[DRY-RUN] Would run: brew cleanup -s --prune=all")
+    bufPrint("[DRY-RUN] Would run: brew doctor")
+    bufPrint("[DRY-RUN] Would link any unlinked kegs")
+    summaryUpdated += "Homebrew"
+}
+
+private fun RunContext.handleBrewUpdateFailure(result: ProcessResult) {
+    val isLockContention = result.output.contains("already locked", ignoreCase = true)
+            || result.output.contains("Another `brew update` process", ignoreCase = true)
+            || result.output.contains("Another brew update", ignoreCase = true)
+    if (isLockContention) {
+        bufPrint("${YELLOW}Homebrew: another update process is already running — skipping.$RESET")
+        bufPrint("Wait for it to finish, or remove the lock:")
+        bufPrint("  rm -f $(brew --prefix)/var/homebrew/locks/update")
+        summaryWarnings += "Homebrew skipped: lock contention (another brew update was running)"
+    } else {
+        bufPrint("${RED}Warning: Homebrew update failed (exit ${result.exitCode})$RESET")
+        summaryFailed += "Homebrew"
+    }
+}
+
+private fun RunContext.brewUpgrade(): Int {
     section("Homebrew upgrade (--greedy)")
-    val upgradeResult = runCaptured("brew", "upgrade", "--greedy")
-    bufPrint(upgradeResult.output)
-    val upgradeExit = upgradeResult.exitCode
-
-    if (upgradeExit != 0) {
+    val result = runCaptured("brew", "upgrade", "--greedy")
+    bufPrint(result.output)
+    if (result.exitCode != 0) {
         bufPrint("${YELLOW}Warning: Some packages failed to upgrade$RESET")
         summaryWarnings += "Some brew packages failed to upgrade"
     }
+    brewSurfaceDeprecationWarnings(result.output)
+    return result.exitCode
+}
 
-    // Surface deprecated formula warnings
+private fun RunContext.brewSurfaceDeprecationWarnings(output: String) {
     val deprecatedPattern = Regex("""Warning:\s+\S+\s+(is deprecated|has been deprecated)""", RegexOption.IGNORE_CASE)
-    deprecatedPattern.findAll(upgradeResult.output).map { it.value.trim() }.toSet().forEach { msg ->
+    deprecatedPattern.findAll(output).map { it.value.trim() }.toSet().forEach { msg ->
         bufPrint("${YELLOW}$msg$RESET")
         summaryWarnings += "brew: $msg"
     }
-    val eolPattern = Regex("""([\w][\w@.]+)\s+\S+\s+is deprecated because""", RegexOption.IGNORE_CASE)
-    eolPattern.findAll(upgradeResult.output).map { it.groupValues[1] }.toSet().forEach { formula ->
-        if (summaryWarnings.none { it.contains(formula) })
-            summaryWarnings += "brew deprecated: $formula — consider: brew uninstall $formula"
-    }
+    val eolPattern = Regex("""(\w[\w@.]+)\s+\S+\s+is deprecated because""", RegexOption.IGNORE_CASE)
+    eolPattern.findAll(output).map { it.groupValues[1] }.toSet()
+        .filter { formula -> summaryWarnings.none { it.contains(formula) } }
+        .forEach { formula -> summaryWarnings += "brew deprecated: $formula — consider: brew uninstall $formula" }
+}
 
+private fun RunContext.brewCleanupAndDoctor(upgradeExit: Int) {
     section("Homebrew cleanup")
     runProcess("brew", "cleanup", "-s", "--prune=all")
-
     if (upgradeExit != 0) {
         section("Homebrew doctor (triggered by upgrade failure)")
         runProcess("brew", "doctor")
     }
+}
 
+private fun RunContext.brewLinkUnlinkedKegs() {
     section("Linking unlinked kegs")
-    val unlinkedKegs: List<String> = when {
-        commandExists("jq") -> captureOutput(
-            "bash", "-c",
-            "brew info --json=v1 --installed 2>/dev/null | jq -r '.[] | select(.keg_only == false) | select(.linked_keg == null) | .name' 2>/dev/null"
-        )?.lines()?.filter { it.isNotBlank() } ?: emptyList()
+    val kegs = findUnlinkedKegs()
+    if (kegs.isEmpty()) {
+        bufPrint("No unlinked kegs found")
+        return
+    }
+    bufPrint("Found unlinked kegs: ${kegs.joinToString(", ")}")
+    kegs.forEach { keg ->
+        bufPrint("Linking $keg...")
+        if (runProcess("brew", "link", "--overwrite", keg) != 0) {
+            bufPrint("Warning: Failed to link $keg")
+            summaryWarnings += "Failed to link keg: $keg"
+        }
+    }
+}
 
-        commandExists("python3") -> captureOutput(
-            "bash", "-c",
-            """brew info --json=v1 --installed 2>/dev/null | python3 -c "
+private fun RunContext.findUnlinkedKegs(): List<String> = when {
+    commandExists("jq") -> captureOutput(
+        "bash", "-c",
+        "brew info --json=v1 --installed 2>/dev/null | jq -r '.[] | select(.keg_only == false) | select(.linked_keg == null) | .name' 2>/dev/null"
+    )?.lines()?.filter { it.isNotBlank() } ?: emptyList()
+
+    commandExists("python3") -> captureOutput(
+        "bash", "-c",
+        """brew info --json=v1 --installed 2>/dev/null | python3 -c "
 import sys, json
 for f in json.load(sys.stdin):
     if not f.get('keg_only') and f.get('linked_keg') is None and f.get('installed'):
         print(f['name'])
 " 2>/dev/null"""
-        )?.lines()?.filter { it.isNotBlank() } ?: emptyList()
+    )?.lines()?.filter { it.isNotBlank() } ?: emptyList()
 
-        else -> {
-            bufPrint("Warning: neither jq nor python3 found; skipping unlinked keg detection")
-            summaryWarnings += "Install jq or python3 to enable unlinked keg detection"
-            emptyList()
-        }
+    else -> {
+        bufPrint("Warning: neither jq nor python3 found; skipping unlinked keg detection")
+        summaryWarnings += "Install jq or python3 to enable unlinked keg detection"
+        emptyList()
     }
-
-    if (unlinkedKegs.isEmpty()) {
-        bufPrint("No unlinked kegs found")
-    } else {
-        bufPrint("Found unlinked kegs: ${unlinkedKegs.joinToString(", ")}")
-        unlinkedKegs.forEach { keg ->
-            bufPrint("Linking $keg...")
-            if (runProcess("brew", "link", "--overwrite", keg) != 0) {
-                bufPrint("Warning: Failed to link $keg")
-                summaryWarnings += "Failed to link keg: $keg"
-            }
-        }
-    }
-    summaryUpdated += "Homebrew"
 }
+
+private const val CODEX_CLI = "Codex CLI"
 
 fun RunContext.codexUpdate() {
     section("Codex CLI update")
@@ -129,7 +144,7 @@ fun RunContext.codexUpdate() {
 
     if (dryRun) {
         bufPrint("[DRY-RUN] Would check if codex is outdated and upgrade")
-        summaryUpdated += "Codex CLI"
+        summaryUpdated += CODEX_CLI
         return
     }
 
@@ -148,11 +163,11 @@ fun RunContext.codexUpdate() {
             bufPrint("Warning: Failed to upgrade Codex CLI")
             summaryWarnings += "Failed to upgrade Codex CLI"
         } else {
-            summaryUpdated += "Codex CLI"
+            summaryUpdated += CODEX_CLI
         }
     } else {
         bufPrint("Codex CLI is up to date")
-        summaryUpdated += "Codex CLI"
+        summaryUpdated += CODEX_CLI
     }
 }
 
@@ -177,7 +192,7 @@ fun RunContext.sdkmanUpdate() {
 
     // SDKMAN helper scripts use ${var^^} (bash 4+ syntax); run in zsh 5.9+ or Homebrew bash 4+
     val sdkmanShell = when {
-        commandExists("zsh")                    -> "zsh"
+        commandExists("zsh") -> "zsh"
         File("/opt/homebrew/bin/bash").exists() -> "/opt/homebrew/bin/bash"
         else -> {
             bufPrint("Warning: SDKMAN requires zsh 5.9+ or bash 4+ (brew install bash)")
@@ -374,7 +389,8 @@ fun RunContext.macosUpdate() {
     }
 
     if (result.output.contains("restart", ignoreCase = true) ||
-        result.output.contains("A restart is required", ignoreCase = true)) {
+        result.output.contains("A restart is required", ignoreCase = true)
+    ) {
         bufPrint("${YELLOW}Warning: A system restart is required to complete the macOS update$RESET")
         summaryWarnings += "macOS update requires restart"
         restartRequired.set(true)
@@ -410,7 +426,7 @@ fun RunContext.ohmyzshUpdate() {
     }
 
     if (dryRun) {
-        bufPrint("[DRY-RUN] Would run: omz update  (or zsh \$ZSH/tools/upgrade.sh)")
+        bufPrint($$"[DRY-RUN] Would run: omz update  (or zsh $ZSH/tools/upgrade.sh)")
         summaryUpdated += "Oh My Zsh"
         return
     }

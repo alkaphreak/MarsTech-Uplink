@@ -104,6 +104,7 @@ class MacUpdateCommand : Callable<Int> {
         Config.appendLog("Started: ${Config.dateStr} | Host: ${Config.cachedDeviceName}\n")
     }
 
+    @Suppress("SameReturnValue")
     private fun runBackupOnly(ctx: RunContext): Int {
         ctx.backupShellConfigs()
         ctx.backupKeewebDb()
@@ -122,7 +123,7 @@ class MacUpdateCommand : Callable<Int> {
             println()
             println("$BOLD===============================================$RESET")
             println("${YELLOW}${BOLD}           DRY-RUN MODE ENABLED              $RESET")
-            println("${YELLOW}  No changes will be made to your system     $RESET")
+            println("$YELLOW  No changes will be made to your system     $RESET")
             println("$BOLD===============================================$RESET")
             println()
         }
