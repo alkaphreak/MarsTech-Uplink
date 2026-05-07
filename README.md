@@ -12,11 +12,11 @@ macOS system updater — Kotlin/Maven CLI tool compiled to a GraalVM native bina
 ## Usage
 
 ```zsh
-mac-update                 # Run all updates
-mac-update --dry-run       # Preview actions without executing
-mac-update --only brew     # Run a single updater
-mac-update --backup-only   # Backup shell configs and KeeWeb only
-mac-update --help
+marstech-uplink                 # Run all updates
+marstech-uplink --dry-run       # Preview actions without executing
+marstech-uplink --only brew     # Run a single updater
+marstech-uplink --backup-only   # Backup shell configs and KeeWeb only
+marstech-uplink --help
 ```
 
 ### Tools for `--only`
@@ -43,7 +43,7 @@ mvn verify
 
 # Fat JAR
 mvn package
-java -jar target/mac-update.jar --dry-run
+java -jar target/marstech-uplink.jar --dry-run
 
 # GraalVM native binary — requires GraalVM JDK with native-image
 mvn -Pnative package
@@ -52,7 +52,7 @@ mvn -Pnative package
 ## Install native binary
 
 ```zsh
-mvn -Pnative package && cp target/mac-update ~/.local/bin/mac-update && chmod +x ~/.local/bin/mac-update
+mvn -Pnative package && cp target/marstech-uplink ~/.local/bin/marstech-uplink && chmod +x ~/.local/bin/marstech-uplink
 ```
 
 ## Project structure
@@ -81,11 +81,39 @@ src/main/kotlin/space/marstech/uplink/
 | Native    | GraalVM native-maven-plugin  |
 | Testing   | JUnit 5 + Mockito-Kotlin     |
 
+## Configuration
+
+On the first run, marstech-uplink creates a config file at:
+
+```
+~/Library/Application Support/marstech/marstech-uplink/config.toml
+```
+
+Edit it to set your actual paths:
+
+```toml
+[paths]
+# Folder where .profile and .zshrc snapshots are stored
+shell_snapshot_dir = "~/MyWorkspace/My-Configs"
+# KeePass database to back up
+keeweb_source      = "~/KeeWeb/myKeeweb.kdbx"
+# Destination folder for KeeWeb backups
+keeweb_backup_dir  = "~/Backup/Apps/KeeWeb"
+
+[backups]
+# Number of shell-config snapshots to keep per device
+shell_snapshot_retention = 3
+# Number of KeeWeb database backups to keep
+keeweb_retention         = 5
+```
+
+Changes take effect immediately on the next run — no restart needed.
+
 ## Log file
 
-`~/Library/Logs/marstech/mac-update/mac-update-YYYY-MM-DD.log`
+`~/Library/Logs/marstech/marstech-uplink/marstech-uplink-YYYY-MM-DD.log`
 
 ## Related
 
-- Source `.kts` (being retired): `Marstech-Configs/scripts/Mac/mac-update.main.kts`
+- Source `.kts` (being retired): `Marstech-Configs/scripts/Mac/marstech-uplink.main.kts`
 - YouTrack: MARSTECH-635

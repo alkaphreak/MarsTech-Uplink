@@ -16,21 +16,21 @@ import java.util.concurrent.Executors
 import kotlin.system.exitProcess
 
 @Command(
-    name = "mac-update",
+    name = "marstech-uplink",
     description = ["Updates all development tools, packages, and system software on macOS."],
     mixinStandardHelpOptions = true,
-    version = ["mac-update 1.0.0"],
+    version = ["marstech-uplink 1.0.0"],
     footer = [
         "",
         "Tools for --only: brew  sdkman  npm  uv  codex  rustup  pipx  gh  macos  mas  ohmyzsh",
         "",
         "Examples:",
-        "  mac-update",
-        "  mac-update --dry-run",
-        "  mac-update --only brew",
-        "  mac-update --backup-only",
+        "  marstech-uplink",
+        "  marstech-uplink --dry-run",
+        "  marstech-uplink --only brew",
+        "  marstech-uplink --backup-only",
         "",
-        "Log file: ~/Library/Logs/marstech/mac-update/mac-update-YYYY-MM-DD.log",
+        "Log file: ~/Library/Logs/marstech/marstech-uplink/marstech-uplink-YYYY-MM-DD.log",
     ]
 )
 class MacUpdateCommand : Callable<Int> {
@@ -72,38 +72,72 @@ class MacUpdateCommand : Callable<Int> {
     private fun runUpdate(normalizedTool: String?): Int {
         val ctx = RunContext(dryRun = dryRun, backupOnly = backupOnly, onlyTool = normalizedTool)
 
-        // Startup banner
+        printStartBanner()
+
+        if (ctx.backupOnly) return runBackupOnly(ctx)
+
+        printModeBanners(ctx)
+
+        val executor = Executors.newCachedThreadPool()
+        try {
+            if (ctx.onlyTool == null) {
+                runPreFlight(ctx)
+                runBackups(ctx, executor)
+            }
+            runUpdaters(ctx, executor)
+        } finally {
+            executor.shutdown()
+        }
+
+        ctx.printSummary()
+        return if (ctx.summaryFailed.isNotEmpty()) 1 else 0
+    }
+
+    private fun printStartBanner() {
         println()
         println("$BOLD$CYAN##############################################$RESET")
-        println("$BOLD$CYAN  mac-update — macOS System Update Script   $RESET")
+        println("$BOLD$CYAN  marstech-uplink — macOS System Update Script $RESET")
         println("$BOLD$CYAN  Started : ${Config.dateStr}                $RESET")
         println("$BOLD$CYAN  Host    : ${Config.cachedDeviceName}       $RESET")
         println("$BOLD$CYAN##############################################$RESET")
         println()
-        Config.appendLog("Started: ${Config.dateStr} | Host: ${Config.cachedDeviceName}\n")
 
-        if (ctx.backupOnly) {
-            ctx.backupShellConfigs()
-            ctx.backupKeewebDb()
-            val elapsed = formatElapsed(System.currentTimeMillis() - ctx.startTimeMs)
-            println()
-            println("$BOLD===============================================$RESET")
-            println("${GREEN}${BOLD}  mac-update BACKUP-ONLY COMPLETED           $RESET")
-            println("$BOLD  Finished in $elapsed$RESET")
-            println("$BOLD===============================================$RESET")
-            println()
-            return 0
+        if (Config.configWasCreated) {
+            println("$YELLOW${BOLD}  ★  Config file created for the first time:$RESET")
+            println("$YELLOW     ${Config.configFile.absolutePath}$RESET")
+            println("$YELLOW     Edit it to customise paths and retention settings.$RESET")
+        } else {
+            println("$CYAN  Config: ${Config.configFile.absolutePath}$RESET")
         }
+        println()
 
+        Config.appendLog("Started: ${Config.dateStr} | Host: ${Config.cachedDeviceName}\n")
+        Config.appendLog("Config:  ${Config.configFile.absolutePath} (created=${Config.configWasCreated})\n")
+    }
+
+    @Suppress("SameReturnValue")
+    private fun runBackupOnly(ctx: RunContext): Int {
+        ctx.backupShellConfigs()
+        ctx.backupKeewebDb()
+        val elapsed = formatElapsed(System.currentTimeMillis() - ctx.startTimeMs)
+        println()
+        println("$BOLD===============================================$RESET")
+        println("${GREEN}${BOLD}  marstech-uplink BACKUP-ONLY COMPLETED       $RESET")
+        println("$BOLD  Finished in $elapsed$RESET")
+        println("$BOLD===============================================$RESET")
+        println()
+        return 0
+    }
+
+    private fun printModeBanners(ctx: RunContext) {
         if (ctx.dryRun) {
             println()
             println("$BOLD===============================================$RESET")
             println("${YELLOW}${BOLD}           DRY-RUN MODE ENABLED              $RESET")
-            println("${YELLOW}  No changes will be made to your system     $RESET")
+            println("$YELLOW  No changes will be made to your system     $RESET")
             println("$BOLD===============================================$RESET")
             println()
         }
-
         if (ctx.onlyTool != null) {
             println()
             println("$BOLD===============================================$RESET")
@@ -111,71 +145,92 @@ class MacUpdateCommand : Callable<Int> {
             println("$BOLD===============================================$RESET")
             println()
         }
+    }
 
-        val executor = Executors.newCachedThreadPool()
+    private fun runPreFlight(ctx: RunContext) {
+        phaseHeader(0, "Pre-flight checks")
+        ctx.checkTouchIdSudo()
+    }
 
-        // Phase 0 — Pre-flight
-        if (ctx.onlyTool == null) {
-            phaseHeader(0, "Pre-flight checks")
-            ctx.checkTouchIdSudo()
+    private fun runBackups(ctx: RunContext, executor: Executor) {
+        phaseHeader(1, "Backups")
+        val futures = buildList {
+            if (Config.appConfig.tools.backupShells)
+                add(ctx.launchAsync("backup-shells", executor, ctx::backupShellConfigs))
+            else
+                ctx.summarySkipped += "Shell config backup (disabled in config)"
+
+            if (Config.appConfig.tools.backupKeeweb)
+                add(ctx.launchAsync("backup-keeweb", executor, ctx::backupKeewebDb))
+            else
+                ctx.summarySkipped += "KeeWeb backup (disabled in config)"
         }
+        CompletableFuture.allOf(*futures.toTypedArray()).join()
+    }
 
-        // Phase 1 — Backups
-        if (ctx.onlyTool == null) {
-            phaseHeader(1, "Backups")
-            CompletableFuture.allOf(
-                ctx.launchAsync("backupShellConfigs", executor, ctx::backupShellConfigs),
-                ctx.launchAsync("backupKeewebDb", executor, ctx::backupKeewebDb)
-            ).join()
-        }
-
-        // Phase 2 — Updaters (parallel; codex must run after brew)
+    private fun runUpdaters(ctx: RunContext, executor: Executor) {
         phaseHeader(2, "Updates")
         ctx.toolsPresent = buildToolsPresent()
         val presentTools = ctx.toolsPresent.filter { it.value }.keys
         println("${CYAN}Tools detected: ${presentTools.sorted().joinToString(", ")}$RESET")
         Config.appendLog("Tools detected: ${presentTools.sorted().joinToString(", ")}\n")
 
-        val updateFutures = mutableListOf<CompletableFuture<Void>>()
+        CompletableFuture.allOf(*buildUpdateFutures(ctx, executor).toTypedArray()).join()
+    }
 
-        if (ctx.shouldRun("brew") || ctx.shouldRun("codex")) {
-            updateFutures += ctx.launchAsync("brew+codex", executor) {
-                if (ctx.toolPresent("brew")) {
-                    if (ctx.shouldRun("brew"))  ctx.brewUpdate()
-                    if (ctx.shouldRun("codex")) ctx.codexUpdate()
-                } else {
-                    if (ctx.shouldRun("brew"))  ctx.summarySkipped += "Homebrew (not installed)"
-                    if (ctx.shouldRun("codex")) ctx.summarySkipped += "Codex CLI (brew not installed)"
-                }
+    private fun buildUpdateFutures(ctx: RunContext, executor: Executor): List<CompletableFuture<Void>> =
+        buildList {
+            addBrewAndCodex(ctx, executor)
+            launchIf(ctx, "sdkman",  executor, ctx::sdkmanUpdate)
+            launchIf(ctx, "uv",      executor, ctx::uvUpdate)
+            launchIf(ctx, "npm",     executor) {
+                if (ctx.toolPresent("npm")) ctx.npmUpdate()
+                else ctx.summarySkipped += "NPM (not installed)"
             }
+            launchIf(ctx, "rustup",  executor, ctx::rustupUpdate)
+            launchIf(ctx, "pipx",    executor, ctx::pipxUpdate)
+            launchIf(ctx, "gh",      executor, ctx::ghExtUpdate)
+            launchIf(ctx, "macos",   executor) {
+                if (ctx.toolPresent("softwareupdate")) ctx.macosUpdate()
+            }
+            launchIf(ctx, "mas",     executor) {
+                if (ctx.toolPresent("mas")) ctx.masUpdate()
+                else ctx.summarySkipped += "Mac App Store (mas not installed)"
+            }
+            launchIf(ctx, "ohmyzsh", executor, ctx::ohmyzshUpdate)
         }
-        if (ctx.shouldRun("sdkman")) updateFutures += ctx.launchAsync("sdkmanUpdate", executor, ctx::sdkmanUpdate)
-        if (ctx.shouldRun("uv"))     updateFutures += ctx.launchAsync("uvUpdate", executor, ctx::uvUpdate)
-        if (ctx.shouldRun("npm")) updateFutures += ctx.launchAsync("npmUpdate", executor) {
-            if (ctx.toolPresent("npm")) ctx.npmUpdate() else ctx.summarySkipped += "NPM (not installed)"
-        }
-        if (ctx.shouldRun("rustup")) updateFutures += ctx.launchAsync("rustupUpdate", executor, ctx::rustupUpdate)
-        if (ctx.shouldRun("pipx"))   updateFutures += ctx.launchAsync("pipxUpdate", executor, ctx::pipxUpdate)
-        if (ctx.shouldRun("gh"))     updateFutures += ctx.launchAsync("ghExtUpdate", executor, ctx::ghExtUpdate)
-        if (ctx.shouldRun("macos")) updateFutures += ctx.launchAsync("macosUpdate", executor) {
-            if (ctx.toolPresent("softwareupdate")) ctx.macosUpdate()
-        }
-        if (ctx.shouldRun("mas")) updateFutures += ctx.launchAsync("masUpdate", executor) {
-            if (ctx.toolPresent("mas")) ctx.masUpdate() else ctx.summarySkipped += "Mac App Store (mas not installed)"
-        }
-        if (ctx.shouldRun("ohmyzsh")) updateFutures += ctx.launchAsync("ohmyzshUpdate", executor, ctx::ohmyzshUpdate)
 
-        CompletableFuture.allOf(*updateFutures.toTypedArray()).join()
-        executor.shutdown()
+    /**
+     * Adds the brew+codex future when either tool is requested.
+     * Codex is intentionally coupled to brew — it must run after brewUpdate().
+     */
+    private fun MutableList<CompletableFuture<Void>>.addBrewAndCodex(ctx: RunContext, executor: Executor) {
+        if (!ctx.shouldRun("brew") && !ctx.shouldRun("codex")) return
+        add(ctx.launchAsync("brew", executor) {
+            if (ctx.toolPresent("brew")) {
+                if (ctx.shouldRun("brew"))  ctx.brewUpdate()
+                if (ctx.shouldRun("codex")) ctx.codexUpdate()
+            } else {
+                if (ctx.shouldRun("brew"))  ctx.summarySkipped += "Homebrew (not installed)"
+                if (ctx.shouldRun("codex")) ctx.summarySkipped += "Codex CLI (brew not installed)"
+            }
+        })
+    }
 
-        ctx.printSummary()
-        return if (ctx.summaryFailed.isNotEmpty()) 1 else 0
+    /** Conditionally launches [block] as an async task when [tool] should run. */
+    private fun MutableList<CompletableFuture<Void>>.launchIf(
+        ctx: RunContext,
+        tool: String,
+        executor: Executor,
+        block: () -> Unit,
+    ) {
+        if (ctx.shouldRun(tool)) add(ctx.launchAsync(tool, executor, block))
     }
 }
 
 /**
  * Submits a block to an executor as a CompletableFuture.
- * Initialises a per-task output buffer, flushes it atomically on completion.
+ * Initializes a per-task output buffer, flushes it atomically on completion.
  * Exceptions are caught and recorded instead of crashing the whole run.
  */
 fun RunContext.launchAsync(
@@ -183,7 +238,7 @@ fun RunContext.launchAsync(
     executor: Executor,
     block: () -> Unit,
 ): CompletableFuture<Void> = CompletableFuture.runAsync({
-    initTaskBuffer()
+    initTaskBuffer(label)
     try {
         block()
     } catch (e: Exception) {
@@ -195,7 +250,6 @@ fun RunContext.launchAsync(
     }
 }, executor)
 
-fun main(args: Array<String>) {
-    val exitCode = CommandLine(MacUpdateCommand()).execute(*args)
-    exitProcess(exitCode)
+fun main(args: Array<String>): Unit = CommandLine(MacUpdateCommand()).execute(*args).run {
+    exitProcess(this)
 }

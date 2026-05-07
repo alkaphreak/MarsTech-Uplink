@@ -118,7 +118,7 @@
                 </executions>
             </plugin>
 
-            <!-- Fat JAR — produces target/mac-update.jar -->
+            <!-- Fat JAR — produces target/marstech-uplink.jar -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
@@ -133,7 +133,7 @@
                         <descriptorRef>jar-with-dependencies</descriptorRef>
                     </descriptorRefs>
                     <appendAssemblyId>false</appendAssemblyId>
-                    <finalName>mac-update</finalName>
+                    <finalName>marstech-uplink</finalName>
                 </configuration>
                 <executions>
                     <execution>
@@ -166,7 +166,7 @@
                         <version>0.10.3</version>
                         <extensions>true</extensions>
                         <configuration>
-                            <imageName>mac-update</imageName>
+                            <imageName>marstech-uplink</imageName>
                             <mainClass>${main.class}</mainClass>
                             <buildArgs>
                                 <buildArg>--no-fallback</buildArg>

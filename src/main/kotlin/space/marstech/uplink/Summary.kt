@@ -14,7 +14,7 @@ fun formatElapsed(ms: Long): String {
     return if (minutes > 0) "${minutes}m ${seconds}s" else "${seconds}s"
 }
 
-/** Prints a section header — buffered, coloured. */
+/** Prints a section header — buffered, colored. */
 fun RunContext.section(title: String) {
     bufPrint()
     bufPrint("$CYAN== $title ==$RESET")
@@ -34,6 +34,19 @@ fun RunContext.printSummary() {
     val elapsed = formatElapsed(System.currentTimeMillis() - startTimeMs)
     val hasFailed = summaryFailed.isNotEmpty()
 
+    printSummaryTable(elapsed)
+    printFooterMessages()
+    printCompletionBanner(elapsed, hasFailed)
+
+    if (!dryRun) sendNotification(
+        title = if (hasFailed) "marstech-uplink: Failures" else "marstech-uplink: Done",
+        message = buildNotificationMessage(elapsed, hasFailed)
+    )
+
+    appendSummaryLog(elapsed)
+}
+
+private fun RunContext.printSummaryTable(elapsed: String) {
     println()
     println("$BOLD===============================================$RESET")
     println("$BOLD                UPDATE SUMMARY               $RESET")
@@ -52,46 +65,46 @@ fun RunContext.printSummary() {
     println("Duration:     $elapsed")
     println("$BOLD===============================================$RESET")
     println()
+}
 
+private fun RunContext.printFooterMessages() {
     if (dryRun) {
         println("[DRY-RUN] No changes were made.")
     } else {
         println("Please restart your terminal to apply any changes.")
-        if (restartRequired.get()) {
+        if (restartRequired.get())
             println("${RED}${BOLD}A system restart is required to complete the macOS update.$RESET")
-        } else {
+        else
             println("Some updates may require a system restart to take full effect.")
-        }
     }
+}
 
+private fun printCompletionBanner(elapsed: String, hasFailed: Boolean) {
     println()
     println("$BOLD===============================================$RESET")
-    if (hasFailed) {
-        println("${RED}${BOLD}  mac-update COMPLETED WITH FAILURES        $RESET")
-    } else {
-        println("${GREEN}${BOLD}  mac-update COMPLETED SUCCESSFULLY         $RESET")
-    }
+    if (hasFailed)
+        println("${RED}${BOLD}  marstech-uplink COMPLETED WITH FAILURES     $RESET")
+    else
+        println("${GREEN}${BOLD}  marstech-uplink COMPLETED SUCCESSFULLY      $RESET")
     println("$BOLD  Finished in $elapsed$RESET")
     println("$BOLD===============================================$RESET")
-    println("${CYAN}  Log: ${Config.logFile.absolutePath}$RESET")
+    println("$CYAN  Log: ${Config.logFile.absolutePath}$RESET")
     println()
+}
 
-    if (!dryRun) {
-        val notifTitle = if (hasFailed) "mac-update: Failures" else "mac-update: Done"
-        val notifMsg = buildString {
-            if (summaryUpdated.isNotEmpty()) append("Updated: ${summaryUpdated.size} tool(s). ")
-            if (hasFailed) append("Failed: ${summaryFailed.joinToString(", ")}. ")
-            if (restartRequired.get()) append("Restart required. ")
-            append("Finished in $elapsed.")
-        }
-        sendNotification(notifTitle, notifMsg)
-    }
+private fun RunContext.buildNotificationMessage(elapsed: String, hasFailed: Boolean) = buildString {
+    if (summaryUpdated.isNotEmpty()) append("Updated: ${summaryUpdated.size} tool(s). ")
+    if (hasFailed) append("Failed: ${summaryFailed.joinToString(", ")}. ")
+    if (restartRequired.get()) append("Restart required. ")
+    append("Finished in $elapsed.")
+}
 
+private fun RunContext.appendSummaryLog(elapsed: String) {
     Config.appendLog(buildString {
         appendLine(); appendLine("=== SUMMARY ===")
-        if (summaryUpdated.isNotEmpty())  appendLine("Updated:  ${summaryUpdated.joinToString(", ")}")
-        if (summarySkipped.isNotEmpty())  appendLine("Skipped:  ${summarySkipped.joinToString(", ")}")
-        if (summaryFailed.isNotEmpty())   appendLine("Failed:   ${summaryFailed.joinToString(", ")}")
+        if (summaryUpdated.isNotEmpty()) appendLine("Updated:  ${summaryUpdated.joinToString(", ")}")
+        if (summarySkipped.isNotEmpty()) appendLine("Skipped:  ${summarySkipped.joinToString(", ")}")
+        if (summaryFailed.isNotEmpty()) appendLine("Failed:   ${summaryFailed.joinToString(", ")}")
         if (summaryWarnings.isNotEmpty()) appendLine("Warnings: ${summaryWarnings.joinToString("; ")}")
         appendLine("Duration: $elapsed")
         if (restartRequired.get()) appendLine("RESTART REQUIRED")
@@ -99,11 +112,17 @@ fun RunContext.printSummary() {
 }
 
 fun sendNotification(title: String, message: String) {
-    if (!commandExists("osascript")) return
-    runCatching {
-        ProcessBuilder(
-            "osascript", "-e",
-            """display notification "${message.replace("\"", "\\\"")}" with title "${title.replace("\"", "\\\"")}""""
-        ).start().waitFor()
+    if (commandExists("osascript")) {
+        runCatching {
+            ProcessBuilder(
+                "osascript", "-e",
+                """display notification "${message.replace("\"", "\\\"")}" with title "${
+                    title.replace(
+                        "\"",
+                        "\\\""
+                    )
+                }""""
+            ).start().waitFor()
+        }
     }
 }
