@@ -43,5 +43,4 @@
 - Tests are smoke-level, not hermetic. `BackupsTest.backupKeewebDb()` may copy a real KeeWeb database if the configured source path exists on the current machine.
 - Config paths in `AppConfig` default to generic placeholders (`~/KeeWeb/…`, `~/MyWorkspace/…`); the real paths are user-defined in `config.toml`.
 - `macosUpdate()` dry-run still calls `softwareupdate --list`; under Surefire this emits a known `Corrupted channel by directly writing to native stream` warning in `target/surefire-reports/*.dumpstream`.
-- Running the fat JAR on Java 25 shows Jansi native-access warnings; they are environmental, not Kotlin compile failures.
 - Ignore `target/` for source edits; the real implementation lives only under `src/main/kotlin` and `src/test/kotlin`.

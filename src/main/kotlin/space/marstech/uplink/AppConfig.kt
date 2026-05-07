@@ -56,9 +56,11 @@ data class AppConfig(
     val shellSnapshotDir: String,
     val keewebSource: String,
     val keewebBackupDir: String,
+    val logDir: String,
     // [backups]
     val shellSnapshotRetention: Int,
     val keewebRetention: Int,
+    val logRetention: Int,
     // [tools]
     val tools: ToolsConfig,
 ) {
@@ -71,8 +73,10 @@ data class AppConfig(
                 shellSnapshotDir       = "$home/MyWorkspace/My-Configs",
                 keewebSource           = "$home/KeeWeb/myKeeweb.kdbx",
                 keewebBackupDir        = "$home/Backup/Apps/KeeWeb",
+                logDir                 = "$home/Library/Logs/marstech/marstech-uplink",
                 shellSnapshotRetention = 3,
                 keewebRetention        = 5,
+                logRetention           = 5,
                 tools                  = ToolsConfig(),
             )
         }
@@ -89,12 +93,16 @@ data class AppConfig(
             |shell_snapshot_dir = "~/MyWorkspace/My-Configs"
             |keeweb_source      = "~/KeeWeb/myKeeweb.kdbx"
             |keeweb_backup_dir  = "~/Backup/Apps/KeeWeb"
+            |# Directory where daily log files are written
+            |log_dir            = "~/Library/Logs/marstech/marstech-uplink"
             |
             |[backups]
             |# Number of shell-config snapshots to keep per device
             |shell_snapshot_retention = 3
             |# Number of KeeWeb database backups to keep
             |keeweb_retention         = 5
+            |# Number of daily log files to keep
+            |log_retention            = 5
             |
             |[tools]
             |# Set to false to permanently skip a tool on every run.
@@ -123,10 +131,12 @@ data class AppConfig(
                 "shell_snapshot_dir" to "\"~/MyWorkspace/My-Configs\"",
                 "keeweb_source"      to "\"~/KeeWeb/myKeeweb.kdbx\"",
                 "keeweb_backup_dir"  to "\"~/Backup/Apps/KeeWeb\"",
+                "log_dir"            to "\"~/Library/Logs/marstech/marstech-uplink\"",
             ),
             "backups" to linkedMapOf(
                 "shell_snapshot_retention" to "3",
                 "keeweb_retention"         to "5",
+                "log_retention"            to "5",
             ),
             "tools" to linkedMapOf(
                 "brew"          to "true",
@@ -215,11 +225,13 @@ data class AppConfig(
 
             val d = defaults()
             return AppConfig(
-                shellSnapshotDir       = str("paths.shell_snapshot_dir",              d.shellSnapshotDir),
-                keewebSource           = str("paths.keeweb_source",                   d.keewebSource),
-                keewebBackupDir        = str("paths.keeweb_backup_dir",               d.keewebBackupDir),
-                shellSnapshotRetention = int("backups.shell_snapshot_retention",       d.shellSnapshotRetention),
-                keewebRetention        = int("backups.keeweb_retention",               d.keewebRetention),
+                shellSnapshotDir       = str("paths.shell_snapshot_dir",    d.shellSnapshotDir),
+                keewebSource           = str("paths.keeweb_source",         d.keewebSource),
+                keewebBackupDir        = str("paths.keeweb_backup_dir",     d.keewebBackupDir),
+                logDir                 = str("paths.log_dir",               d.logDir),
+                shellSnapshotRetention = int("backups.shell_snapshot_retention", d.shellSnapshotRetention),
+                keewebRetention        = int("backups.keeweb_retention",          d.keewebRetention),
+                logRetention           = int("backups.log_retention",             d.logRetention),
                 tools = ToolsConfig(
                     brew          = bool("tools.brew",          d.tools.brew),
                     codex         = bool("tools.codex",         d.tools.codex),

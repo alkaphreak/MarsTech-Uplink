@@ -15,9 +15,12 @@ object Config {
     val HOME: String = System.getenv("HOME") ?: error("HOME environment variable not set")
     val dateStr: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
 
+    /** Optional override set via --config CLI flag; must be assigned before first access of [configFile]. */
+    var configFileOverride: File? = null
+
     /** User config file — created with defaults on first run if absent. */
     val configFile: File by lazy {
-        File("$HOME/Library/Application Support/marstech/marstech-uplink/config.toml")
+        configFileOverride ?: File("$HOME/Library/Application Support/marstech/marstech-uplink/config.toml")
     }
 
     /**
@@ -43,12 +46,30 @@ object Config {
     /** Strips all ANSI escape sequences from a string. */
     fun stripAnsi(text: String): String = ANSI_PATTERN.replace(text, "")
 
-    // Log file — ~/Library/Logs/marstech/marstech-uplink/marstech-uplink-YYYY-MM-DD.log
+    // Log file — path resolved from config.toml [paths] log_dir.
+    // Appends across runs on the same day; rotates keeping the 5 most recent files.
     val logFile: File by lazy {
-        val dir = File("$HOME/Library/Logs/marstech/marstech-uplink")
+        val dir = File(appConfig.logDir)
         dir.mkdirs()
-        File(dir, "marstech-uplink-$dateStr.log").also { f ->
-            f.writeText("=== marstech-uplink log — $dateStr ===\n\n")
+        rotateLogFiles(dir, keep = appConfig.logRetention)
+        val file = File(dir, "marstech-uplink-$dateStr.log")
+        val runStamp = java.time.LocalDateTime.now()
+            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+        // Separate runs with a visible banner; create header only on a brand-new file
+        if (!file.exists()) {
+            file.writeText("=== marstech-uplink log — $dateStr ===\n\n")
+        }
+        file.appendText("\n--- Run started: $runStamp ---\n\n")
+        file
+    }
+
+    /** Deletes all but the [keep] most-recently-modified log files in [dir]. */
+    private fun rotateLogFiles(dir: File, keep: Int) {
+        runCatching {
+            dir.listFiles { f -> f.isFile && f.name.endsWith(".log") }
+                ?.sortedByDescending { it.lastModified() }
+                ?.drop(keep)
+                ?.forEach { it.delete() }
         }
     }
 

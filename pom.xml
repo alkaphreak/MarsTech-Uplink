@@ -128,6 +128,10 @@
                         <manifest>
                             <mainClass>${main.class}</mainClass>
                         </manifest>
+                        <manifestEntries>
+                            <!-- Suppress Jansi native-access warnings on Java 22+ -->
+                            <Enable-Native-Access>ALL-UNNAMED</Enable-Native-Access>
+                        </manifestEntries>
                     </archive>
                     <descriptorRefs>
                         <descriptorRef>jar-with-dependencies</descriptorRef>
@@ -174,6 +178,8 @@
                                 <buildArg>-H:+AddAllCharsets</buildArg>
                                 <buildArg>-H:+ReportExceptionStackTraces</buildArg>
                                 <buildArg>-J-Xmx6g</buildArg>
+                                <!-- Suppress Jansi native-access warnings at runtime -->
+                                <buildArg>--enable-native-access=ALL-UNNAMED</buildArg>
                             </buildArgs>
                         </configuration>
                         <executions>
