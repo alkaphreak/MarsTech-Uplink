@@ -6,15 +6,27 @@ set -eo pipefail  # Note: -u is intentionally omitted here; sdkman-init.sh uses 
 
 # ── sdkman bootstrap ──────────────────────────────────────────────────────────
 export SDKMAN_DIR="$HOME/.sdkman"
-# Temporarily allow unset variables while sourcing sdkman (it is not -u safe)
-set +u
-source "$SDKMAN_DIR/bin/sdkman-init.sh"
-set -u
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "==> Configuring SDK environment from .sdkmanrc..."
+# Source sdkman from $HOME (no .sdkmanrc there) to avoid the auto_env cd-hook
+# firing before the required Java candidate is installed.
 set +u
-sdk env install   # install any missing candidates declared in .sdkmanrc
-sdk env           # activate the versions declared in .sdkmanrc
+cd "$HOME"
+source "$SDKMAN_DIR/bin/sdkman-init.sh"
+
+# Read the required Java version from the project's .sdkmanrc and install it now,
+# while still in $HOME, so the version exists on disk before we cd back.
+# `sdk install` is a no-op when the version is already present.
+JAVA_VERSION=$(grep '^java=' "$PROJECT_DIR/.sdkmanrc" | cut -d= -f2)
+echo "==> Installing java ${JAVA_VERSION} (no-op if already present)..."
+echo "n" | sdk install java "$JAVA_VERSION" 2>&1 || true
+
+# Now cd to the project dir. The auto_env cd-hook will run `sdk env`, but the
+# candidate is already installed so it succeeds without "Stop!".
+cd "$PROJECT_DIR"
+
+# Activate the exact versions declared in .sdkmanrc for this shell session.
+sdk env
 set -u
 
 # Fallback: resolve JAVA_HOME directly from sdkman candidates if sdk env did not export it
@@ -28,14 +40,12 @@ fi
 echo "    Using Java : $(java -version 2>&1 | head -1)"
 echo "    JAVA_HOME  : ${JAVA_HOME}"
 
-PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BINARY_NAME="marstech-uplink"
 TARGET_BIN="${PROJECT_DIR}/target/${BINARY_NAME}"
 INSTALL_DIR="${HOME}/.local/bin"
 INSTALL_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 
 echo "==> Building native binary (mvn -Pnative package)..."
-cd "${PROJECT_DIR}"
 mvn clean install
 mvn -Pnative package -q -DskipTests
 

@@ -9,5 +9,5 @@
 # GraalVM CE (graalce) is required for --native-install / --native-update in mac-update.main.kts
 # It bundles native-image; no separate 'gu install native-image' step needed on 22+.
 
-java=25.0.2-graalce
+java=25.0.1-graalce
 kotlin=2.3.21

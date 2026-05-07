@@ -23,14 +23,16 @@ class BackupsTest {
     }
 
     @Test
-    fun `backupKeewebDb skips when source does not exist`() {
+    fun `backupKeewebDb always records an outcome in summary`() {
         val ctx = RunContext(dryRun = false)
-        // The configured keewebSource (default: ~/KeeWeb/myKeeweb.kdbx) won't exist in CI
+        // The configured keewebSource may or may not exist on the current machine;
+        // the backup dir may or may not be writable (e.g. /Sync not mounted in CI).
+        // The function must always record its terminal state in one of the summary lists.
         ctx.backupKeewebDb()
-        // Either skipped (source missing) or updated (source exists on dev machine)
         val handled = ctx.summarySkipped.any { it.contains("KeeWeb") } ||
-                      ctx.summaryUpdated.contains("KeeWeb backup")
-        assertTrue(handled, "Expected KeeWeb backup to produce a summary entry")
+                      ctx.summaryUpdated.any  { it.contains("KeeWeb") } ||
+                      ctx.summaryFailed.any   { it.contains("KeeWeb") }
+        assertTrue(handled, "Expected KeeWeb backup to produce a summary entry in skipped, updated, or failed")
     }
 
     @Test

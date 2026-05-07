@@ -52,9 +52,12 @@ private const val KEE_WEB_BACKUP = "KeeWeb backup"
 
 fun RunContext.backupKeewebDb() {
     section("Backing up KeePass database (KeeWeb)")
-    val src     = File(Config.appConfig.keewebSource)
-    val destDir = File(Config.appConfig.keewebBackupDir)
-    val dest    = File(destDir, "${Config.dateStr}-${src.name}")
+    val src        = File(Config.appConfig.keewebSource)
+    val destDir    = File(Config.appConfig.keewebBackupDir)
+    val deviceName = Config.cachedDeviceName
+    // Filename includes the device name so backups from different machines coexist
+    // in the same directory and rotation is scoped per device.
+    val dest       = File(destDir, "${Config.dateStr}-$deviceName-${src.name}")
 
     if (!src.exists()) {
         bufPrint("Warning: ${src.absolutePath} not found, skipping KeeWeb backup")
@@ -78,8 +81,9 @@ fun RunContext.backupKeewebDb() {
         }
     summaryUpdated += KEE_WEB_BACKUP
 
-    // Retain only the N most recent backups
-    destDir.listFiles { f -> f.isFile && f.name.endsWith("-${src.name}") }
+    // Retain only the N most recent backups FOR THIS DEVICE
+    val deviceSuffix = "-$deviceName-${src.name}"
+    destDir.listFiles { f -> f.isFile && f.name.endsWith(deviceSuffix) }
         ?.sortedDescending()?.drop(Config.appConfig.keewebRetention)
         ?.forEach { old -> old.delete(); bufPrint("Deleted old backup: ${old.absolutePath}") }
 }
