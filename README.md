@@ -111,6 +111,8 @@ Changes take effect immediately on the next run — no restart needed.
 
 ## Log file
 
+Default location (configurable via `log_dir` in `config.toml`):
+
 `~/Library/Logs/marstech/marstech-uplink/marstech-uplink-YYYY-MM-DD.log`
 
 ## Related

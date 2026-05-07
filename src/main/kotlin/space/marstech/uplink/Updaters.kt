@@ -64,10 +64,27 @@ private fun RunContext.brewUpgrade(): Int {
     bufPrint(result.output)
     if (result.exitCode != 0) {
         bufPrint("${YELLOW}Warning: Some packages failed to upgrade$RESET")
-        summaryWarnings += "Some brew packages failed to upgrade"
+        val failedCasks = parseBrewFailedCasks(result.output)
+        if (failedCasks.isNotEmpty())
+            summaryWarnings += "Brew casks failed to upgrade: ${failedCasks.joinToString(", ")}"
+        else
+            summaryWarnings += "Some brew packages failed to upgrade"
     }
     brewSurfaceDeprecationWarnings(result.output)
     return result.exitCode
+}
+
+/**
+ * Extracts cask names from a "Error: Problems with multiple casks:" block
+ * that brew appends when some cask upgrades fail.
+ */
+private fun parseBrewFailedCasks(output: String): List<String> {
+    val section = output.substringAfter("Error: Problems with multiple casks:", "")
+    if (section.isBlank()) return emptyList()
+    return section.lines()
+        .filter { it.contains(": It seems") || it.contains(": Failed") }
+        .map { it.substringBefore(":").trim() }
+        .filter { it.isNotBlank() }
 }
 
 private fun RunContext.brewSurfaceDeprecationWarnings(output: String) {
@@ -84,7 +101,18 @@ private fun RunContext.brewSurfaceDeprecationWarnings(output: String) {
 
 private fun RunContext.brewCleanupAndDoctor(upgradeExit: Int) {
     section("Homebrew cleanup")
-    runProcess("brew", "cleanup", "-s", "--prune=all")
+    val result = runCaptured("brew", "cleanup", "-s", "--prune=all")
+    // Filter out individual "Removing:" lines — only keep summary and warnings
+    val filtered = result.output.lines().filter { line ->
+        val t = line.trim()
+        !t.startsWith("Removing:") && !t.startsWith("Pruned ")
+    }.joinToString("\n")
+    if (filtered.isNotBlank()) bufPrint(filtered)
+    // Always surface the freed-space summary if present
+    result.output.lines()
+        .firstOrNull { it.contains("freed approximately") }
+        ?.trim()
+        ?.let { bufPrint(it) }
     if (upgradeExit != 0) {
         section("Homebrew doctor (triggered by upgrade failure)")
         runProcess("brew", "doctor")

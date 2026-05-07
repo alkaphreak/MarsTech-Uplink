@@ -36,6 +36,7 @@ INSTALL_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 
 echo "==> Building native binary (mvn -Pnative package)..."
 cd "${PROJECT_DIR}"
+mvn clean install
 mvn -Pnative package -q -DskipTests
 
 if [[ ! -f "${TARGET_BIN}" ]]; then

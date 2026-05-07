@@ -9,6 +9,7 @@ import space.marstech.uplink.Colors.CYAN
 import space.marstech.uplink.Colors.GREEN
 import space.marstech.uplink.Colors.RESET
 import space.marstech.uplink.Colors.YELLOW
+import java.io.File
 import java.util.concurrent.Callable
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
@@ -29,6 +30,7 @@ import kotlin.system.exitProcess
         "  marstech-uplink --dry-run",
         "  marstech-uplink --only brew",
         "  marstech-uplink --backup-only",
+        "  marstech-uplink --config ~/myteam/uplink.toml",
         "",
         "Log file: ~/Library/Logs/marstech/marstech-uplink/marstech-uplink-YYYY-MM-DD.log",
     ]
@@ -50,11 +52,20 @@ class MacUpdateCommand : Callable<Int> {
     )
     var onlyTool: String? = null
 
+    @Option(
+        names = ["--config"],
+        description = ["Path to a custom config file (overrides the default location)"]
+    )
+    var configPath: String? = null
+
     private val validTools = setOf(
         "brew", "sdkman", "npm", "uv", "codex", "rustup", "pipx", "gh", "macos", "mas", "ohmyzsh"
     )
 
     override fun call(): Int {
+        // Must be set before any Config lazy val is accessed
+        configPath?.let { Config.configFileOverride = File(it.expandHome()) }
+
         val tool = onlyTool?.lowercase()
         if (tool != null && tool !in validTools) {
             System.err.println("Unknown tool for --only: $onlyTool. Valid: ${validTools.sorted().joinToString(", ")}")
@@ -107,8 +118,9 @@ class MacUpdateCommand : Callable<Int> {
             println("$YELLOW     ${Config.configFile.absolutePath}$RESET")
             println("$YELLOW     Edit it to customise paths and retention settings.$RESET")
         } else {
-            println("$CYAN  Config: ${Config.configFile.absolutePath}$RESET")
+            println("$CYAN  Config : ${Config.configFile.absolutePath}$RESET")
         }
+        println("$CYAN  Log    : ${Config.logFile.absolutePath}$RESET")
         println()
 
         Config.appendLog("Started: ${Config.dateStr} | Host: ${Config.cachedDeviceName}\n")
@@ -185,17 +197,27 @@ class MacUpdateCommand : Callable<Int> {
             launchIf(ctx, "uv",      executor, ctx::uvUpdate)
             launchIf(ctx, "npm",     executor) {
                 if (ctx.toolPresent("npm")) ctx.npmUpdate()
-                else ctx.summarySkipped += "NPM (not installed)"
+                else {
+                    ctx.bufPrint("npm not found, skipping")
+                    ctx.summarySkipped += "NPM (not installed)"
+                }
             }
             launchIf(ctx, "rustup",  executor, ctx::rustupUpdate)
             launchIf(ctx, "pipx",    executor, ctx::pipxUpdate)
             launchIf(ctx, "gh",      executor, ctx::ghExtUpdate)
             launchIf(ctx, "macos",   executor) {
                 if (ctx.toolPresent("softwareupdate")) ctx.macosUpdate()
+                else {
+                    ctx.bufPrint("softwareupdate not found, skipping macOS update")
+                    ctx.summarySkipped += "macOS update (softwareupdate not available)"
+                }
             }
             launchIf(ctx, "mas",     executor) {
                 if (ctx.toolPresent("mas")) ctx.masUpdate()
-                else ctx.summarySkipped += "Mac App Store (mas not installed)"
+                else {
+                    ctx.bufPrint("mas not found, skipping")
+                    ctx.summarySkipped += "Mac App Store (mas not installed)"
+                }
             }
             launchIf(ctx, "ohmyzsh", executor, ctx::ohmyzshUpdate)
         }
@@ -211,26 +233,39 @@ class MacUpdateCommand : Callable<Int> {
                 if (ctx.shouldRun("brew"))  ctx.brewUpdate()
                 if (ctx.shouldRun("codex")) ctx.codexUpdate()
             } else {
-                if (ctx.shouldRun("brew"))  ctx.summarySkipped += "Homebrew (not installed)"
-                if (ctx.shouldRun("codex")) ctx.summarySkipped += "Codex CLI (brew not installed)"
+                if (ctx.shouldRun("brew")) {
+                    ctx.bufPrint("Homebrew not found, skipping")
+                    ctx.summarySkipped += "Homebrew (not installed)"
+                }
+                if (ctx.shouldRun("codex")) {
+                    ctx.bufPrint("Codex CLI skipped (brew not installed)")
+                    ctx.summarySkipped += "Codex CLI (brew not installed)"
+                }
             }
         })
     }
 
-    /** Conditionally launches [block] as an async task when [tool] should run. */
+    /** Conditionally launches [block] as an async task when [tool] should run.
+     *  When the tool is disabled in config, records a skip entry with a hint on how to re-enable it. */
     private fun MutableList<CompletableFuture<Void>>.launchIf(
         ctx: RunContext,
         tool: String,
         executor: Executor,
         block: () -> Unit,
     ) {
-        if (ctx.shouldRun(tool)) add(ctx.launchAsync(tool, executor, block))
+        when {
+            ctx.shouldRun(tool) -> add(ctx.launchAsync(tool, executor, block))
+            ctx.onlyTool == null && !Config.appConfig.tools.isEnabled(tool) ->
+                ctx.summarySkipped += "$tool (disabled in config — set $tool = true in [tools] to re-enable)"
+        }
     }
 }
 
 /**
  * Submits a block to an executor as a CompletableFuture.
  * Initializes a per-task output buffer, flushes it atomically on completion.
+ * Logs task start and elapsed time directly to the log file (not buffered) so
+ * slow or hanging tools are immediately visible in real-time log tailing.
  * Exceptions are caught and recorded instead of crashing the whole run.
  */
 fun RunContext.launchAsync(
@@ -238,6 +273,8 @@ fun RunContext.launchAsync(
     executor: Executor,
     block: () -> Unit,
 ): CompletableFuture<Void> = CompletableFuture.runAsync({
+    val taskStart = System.currentTimeMillis()
+    Config.logLine(label, "▶ started")
     initTaskBuffer(label)
     try {
         block()
@@ -245,6 +282,8 @@ fun RunContext.launchAsync(
         bufPrint("Error in $label: ${e.message}")
         summaryFailed += "$label (unexpected error)"
     } finally {
+        val elapsed = formatElapsed(System.currentTimeMillis() - taskStart)
+        Config.logLine(label, "■ finished in $elapsed")
         flushTaskBuffer()
         clearTaskBuffer()
     }
