@@ -5,7 +5,7 @@ import java.io.File
 fun RunContext.backupShellConfigs() {
     section("Backing up shell configs (.profile and .zshrc)")
     val deviceName = Config.cachedDeviceName
-    val destDir = File("${Config.repoRoot}/confs/snapshots/${Config.dateStr}-$deviceName")
+    val destDir = File("${Config.repoRoot}/${Config.dateStr}-$deviceName")
 
     if (dryRun) {
         bufPrint("[DRY-RUN] Would create snapshot directory: ${destDir.absolutePath}")
@@ -37,7 +37,7 @@ fun RunContext.backupShellConfigs() {
     saveWithHeader(File("${Config.HOME}/.zshrc"), "zshrc.sh")
 
     // Rotate: keep only the N most recent snapshots for this device
-    val snapshotsDir = File("${Config.repoRoot}/confs/snapshots")
+    val snapshotsDir = File(Config.repoRoot)
     if (snapshotsDir.isDirectory) {
         snapshotsDir
             .listFiles { f -> f.isDirectory && f.name.endsWith("-$deviceName") }
