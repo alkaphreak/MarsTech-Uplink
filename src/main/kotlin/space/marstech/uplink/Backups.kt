@@ -50,6 +50,23 @@ fun RunContext.backupShellConfigs() {
 
 private const val KEE_WEB_BACKUP = "KeeWeb backup"
 
+internal fun pruneKeewebBackups(
+    destDir: File,
+    deviceName: String,
+    sourceName: String,
+    retention: Int,
+    onDelete: (File) -> Unit = {},
+) {
+    val deviceSuffix = "-$deviceName-$sourceName"
+    destDir.listFiles { f -> f.isFile && f.name.endsWith(deviceSuffix) }
+        ?.sortedDescending()
+        ?.drop(retention)
+        ?.forEach { old ->
+            old.delete()
+            onDelete(old)
+        }
+}
+
 fun RunContext.backupKeewebDb() {
     section("Backing up KeePass database (KeeWeb)")
     val src        = File(Config.appConfig.keewebSource)
@@ -82,8 +99,7 @@ fun RunContext.backupKeewebDb() {
     summaryUpdated += KEE_WEB_BACKUP
 
     // Retain only the N most recent backups FOR THIS DEVICE
-    val deviceSuffix = "-$deviceName-${src.name}"
-    destDir.listFiles { f -> f.isFile && f.name.endsWith(deviceSuffix) }
-        ?.sortedDescending()?.drop(Config.appConfig.keewebRetention)
-        ?.forEach { old -> old.delete(); bufPrint("Deleted old backup: ${old.absolutePath}") }
+    pruneKeewebBackups(destDir, deviceName, src.name, Config.appConfig.keewebRetention) { old ->
+        bufPrint("Deleted old backup: ${old.absolutePath}")
+    }
 }
