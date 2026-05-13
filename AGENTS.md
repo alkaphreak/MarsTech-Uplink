@@ -29,6 +29,7 @@
 ## Filesystem and external integration points
 - `Config.repoRoot` resolves through `AppConfig` (loaded from the user config file); shell snapshots are written under `confs/snapshots/...` relative to that root.
 - KeeWeb source and backup destination are configured via `AppConfig.keewebSource` / `AppConfig.keewebBackupDir`; paths default to `~/KeeWeb/myKeeweb.kdbx` and `~/Backup/Apps/KeeWeb`.
+- KeeWeb backups are device-scoped: `backupKeewebDb()` writes files as `YYYY-MM-DD-<device>-<source>.kdbx` and enforces retention per device pattern, not globally per source filename.
 - User config file: `~/Library/Application Support/marstech/marstech-uplink/config.toml` — auto-created with placeholder defaults on first run. See `AppConfig.kt` for all keys.
   - The `[tools]` section maps every tool name to a boolean; set `ohmyzsh = false` to permanently skip a tool without touching the CLI. Managed via `ToolsConfig` and read through `RunContext.shouldRun()`.
   - If a key is missing from an existing config file, `AppConfig.repairMissingKeys()` injects it with its default value in-place on every startup — no manual migration needed when adding new config keys.
@@ -42,7 +43,7 @@
   - `mvn verify`
   - `mvn package` -> produces `target/marstech-uplink.jar`
   - `mvn -Pnative package` -> GraalVM native binary build
-  - `./build-install.sh` -> builds the native binary via `mvn -Pnative package -DskipTests`, copies it to `~/.local/bin/marstech-uplink`, and runs a smoke test. Requires GraalVM JDK declared in `.sdkmanrc`.
+  - `./build-install.sh` -> bootstraps SDKMAN from `.sdkmanrc`, installs/activates the required GraalVM JDK if missing, runs `mvn clean install` then `mvn -Pnative package -DskipTests`, copies the native binary to `~/.local/bin/marstech-uplink`, and runs a smoke test.
 - Verified smoke test for the packaged CLI: `java -jar target/marstech-uplink.jar --dry-run --only brew`.
 - Use `--dry-run` and `--only <tool>` for safe debugging of one updater without touching the full machine.
 

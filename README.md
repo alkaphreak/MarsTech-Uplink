@@ -55,6 +55,12 @@ mvn -Pnative package
 mvn -Pnative package && cp target/marstech-uplink ~/.local/bin/marstech-uplink && chmod +x ~/.local/bin/marstech-uplink
 ```
 
+Preferred automated flow (SDKMAN bootstrap + install + smoke test):
+
+```zsh
+./build-install.sh
+```
+
 ## Project structure
 
 ```
@@ -103,7 +109,7 @@ keeweb_backup_dir  = "~/Backup/Apps/KeeWeb"
 [backups]
 # Number of shell-config snapshots to keep per device
 shell_snapshot_retention = 3
-# Number of KeeWeb database backups to keep
+# Number of KeeWeb database backups to keep per device
 keeweb_retention         = 5
 ```
 
