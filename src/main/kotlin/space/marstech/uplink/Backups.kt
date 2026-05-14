@@ -37,15 +37,34 @@ fun RunContext.backupShellConfigs() {
     saveWithHeader(File("${Config.HOME}/.zshrc"), "zshrc.sh")
 
     // Rotate: keep only the N most recent snapshots for this device
-    val snapshotsDir = File(Config.repoRoot)
-    if (snapshotsDir.isDirectory) {
-        snapshotsDir
-            .listFiles { f -> f.isDirectory && f.name.endsWith("-$deviceName") }
-            ?.sortedDescending()
-            ?.drop(Config.appConfig.shellSnapshotRetention)
-            ?.forEach { old -> old.deleteRecursively(); bufPrint("Deleted: ${old.absolutePath}") }
+    pruneShellSnapshots(File(Config.repoRoot), deviceName, Config.appConfig.shellSnapshotRetention) { old ->
+        bufPrint("Deleted: ${old.absolutePath}")
     }
     summaryUpdated += "Shell config backup"
+}
+
+/**
+ * Deletes all but the [retention] most-recent snapshot directories for [deviceName]
+ * inside [snapshotsDir]. A snapshot directory is identified by having a name that ends
+ * with `-<deviceName>` (format: `YYYY-MM-DD-<deviceName>`).
+ *
+ * Directories belonging to other devices are never touched.
+ */
+internal fun pruneShellSnapshots(
+    snapshotsDir: File,
+    deviceName: String,
+    retention: Int,
+    onDelete: (File) -> Unit = {},
+) {
+    if (!snapshotsDir.isDirectory) return
+    snapshotsDir
+        .listFiles { f -> f.isDirectory && f.name.endsWith("-$deviceName") }
+        ?.sortedDescending()
+        ?.drop(retention)
+        ?.forEach { old ->
+            old.deleteRecursively()
+            onDelete(old)
+        }
 }
 
 private const val KEE_WEB_BACKUP = "KeeWeb backup"

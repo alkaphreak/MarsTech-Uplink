@@ -23,7 +23,7 @@ import kotlin.system.exitProcess
     version = ["marstech-uplink 1.0.0"],
     footer = [
         "",
-        "Tools for --only: brew  sdkman  npm  uv  codex  rustup  pipx  gh  macos  mas  ohmyzsh",
+        "Tools for --only: brew  sdkman  npm  uv  codex  rustup  cargo  pipx  gh  macos  mas  ohmyzsh",
         "",
         "Examples:",
         "  marstech-uplink",
@@ -48,7 +48,7 @@ class MacUpdateCommand : Callable<Int> {
 
     @Option(
         names = ["--only"],
-        description = ["Run a single updater. Valid: brew, sdkman, npm, uv, codex, rustup, pipx, gh, macos, mas, ohmyzsh"]
+        description = ["Run a single updater. Valid: brew, sdkman, npm, uv, codex, rustup, cargo, pipx, gh, macos, mas, ohmyzsh"]
     )
     var onlyTool: String? = null
 
@@ -59,7 +59,7 @@ class MacUpdateCommand : Callable<Int> {
     var configPath: String? = null
 
     private val validTools = setOf(
-        "brew", "sdkman", "npm", "uv", "codex", "rustup", "pipx", "gh", "macos", "mas", "ohmyzsh"
+        "brew", "sdkman", "npm", "uv", "codex", "rustup", "cargo", "pipx", "gh", "macos", "mas", "ohmyzsh"
     )
 
     override fun call(): Int {
@@ -203,6 +203,7 @@ class MacUpdateCommand : Callable<Int> {
                 }
             }
             launchIf(ctx, "rustup",  executor, ctx::rustupUpdate)
+            launchIf(ctx, "cargo",   executor, ctx::cargoUpdate)
             launchIf(ctx, "pipx",    executor, ctx::pipxUpdate)
             launchIf(ctx, "gh",      executor, ctx::ghExtUpdate)
             launchIf(ctx, "macos",   executor) {

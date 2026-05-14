@@ -111,7 +111,7 @@ fun RunContext.runCaptured(vararg cmd: String, workDir: File? = null, timeoutSec
 fun buildToolsPresent(): Map<String, Boolean> {
     val tools = setOf(
         "brew", "mas", "npm", "node", "uv", "rustup", "pipx",
-        "gh", "omz", "softwareupdate", "codex"
+        "gh", "omz", "softwareupdate", "codex", "cargo"
     )
     return tools
         .map { tool -> tool to CompletableFuture.supplyAsync { commandExists(tool) } }

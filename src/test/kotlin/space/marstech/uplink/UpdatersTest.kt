@@ -98,6 +98,24 @@ class UpdatersTest {
     }
 
     // -------------------------------------------------------------------------
+    // cargoUpdate
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `cargoUpdate in dry-run adds Cargo packages to summaryUpdated when cargo present`() {
+        val ctx = dryCtx("cargo" to true)
+        ctx.cargoUpdate()
+        assertTrue(ctx.summaryUpdated.any { it.contains("Cargo") })
+    }
+
+    @Test
+    fun `cargoUpdate skips when cargo not installed`() {
+        val ctx = dryCtx("cargo" to false)
+        ctx.cargoUpdate()
+        assertTrue(ctx.summarySkipped.any { it.contains("Cargo") })
+    }
+
+    // -------------------------------------------------------------------------
     // rustupUpdate
     // -------------------------------------------------------------------------
 

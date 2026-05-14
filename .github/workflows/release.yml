@@ -1,0 +1,150 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.0.0 — no -SNAPSHOT suffix)"
+        required: true
+
+jobs:
+  # ── Build native binary on Intel macOS ────────────────────────────────────
+  build-native-intel:
+    name: Native binary — macOS Intel (x86_64)
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: "21"
+          distribution: "graalvm-community"
+          native-image-job-reports: "true"
+
+      - name: Set release version
+        run: mvn versions:set -DnewVersion=${{ github.event.inputs.version }} -DgenerateBackupPoms=false
+
+      - name: Build native binary
+        run: mvn -Pnative package -DskipTests -q
+
+      - name: Rename binary
+        run: cp target/marstech-uplink target/marstech-uplink-osx-x86_64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-osx-x86_64
+          path: target/marstech-uplink-osx-x86_64
+
+  # ── Build native binary on Apple Silicon ──────────────────────────────────
+  build-native-arm:
+    name: Native binary — macOS Apple Silicon (aarch64)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: "21"
+          distribution: "graalvm-community"
+          native-image-job-reports: "true"
+
+      - name: Set release version
+        run: mvn versions:set -DnewVersion=${{ github.event.inputs.version }} -DgenerateBackupPoms=false
+
+      - name: Build native binary
+        run: mvn -Pnative package -DskipTests -q
+
+      - name: Rename binary
+        run: cp target/marstech-uplink target/marstech-uplink-osx-aarch_64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-osx-aarch_64
+          path: target/marstech-uplink-osx-aarch_64
+
+  # ── Build fat JAR (cross-platform, requires Java 21+) ────────────────────
+  build-jar:
+    name: Fat JAR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+
+      - name: Set release version
+        run: mvn versions:set -DnewVersion=${{ github.event.inputs.version }} -DgenerateBackupPoms=false
+
+      - name: Build fat JAR
+        run: mvn package -DskipTests -q
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jar
+          path: target/marstech-uplink.jar
+
+  # ── Publish GitHub Release via JReleaser ─────────────────────────────────
+  release:
+    name: GitHub Release (JReleaser)
+    needs: [build-native-intel, build-native-arm, build-jar]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required to create tags and releases
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history required for changelog generation
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+
+      - name: Set release version in pom.xml
+        run: mvn versions:set -DnewVersion=${{ github.event.inputs.version }} -DgenerateBackupPoms=false
+
+      - name: Download Intel binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-osx-x86_64
+          path: out
+
+      - name: Download ARM64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-osx-aarch_64
+          path: out
+
+      - name: Download fat JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: jar
+          path: out
+
+      - name: Make binaries executable
+        run: chmod +x out/marstech-uplink-osx-*
+
+      - name: Dry-run check
+        env:
+          JRELEASER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: mvn jreleaser:full-release -Djreleaser.dry.run=true
+
+      - name: Publish release
+        env:
+          JRELEASER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: mvn jreleaser:full-release
+
+      - name: Commit post-release version bump (SNAPSHOT)
+        run: |
+          IFS='.' read -r major minor patch <<< "${{ github.event.inputs.version }}"
+          NEXT="${major}.$((minor + 1)).0-SNAPSHOT"
+          mvn versions:set -DnewVersion=${NEXT} -DgenerateBackupPoms=false
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pom.xml
+          git commit -m "chore: bump to ${NEXT} [skip ci]"
+          git push

@@ -1,0 +1,54 @@
+# jreleaser.yml
+# https://jreleaser.org/guide/latest/index.html
+#
+# Dry-run locally  : mvn jreleaser:full-release -Djreleaser.dry.run=true
+# Full release     : JRELEASER_GITHUB_TOKEN=<token> mvn jreleaser:full-release
+#
+# Artifacts expected in out/ before running (placed by the GitHub Actions release job):
+#   out/marstech-uplink-osx-x86_64   — native binary, macOS Intel
+#   out/marstech-uplink-osx-aarch_64 — native binary, macOS Apple Silicon
+#   out/marstech-uplink.jar          — fat JAR (Java 21+ required)
+
+project:
+  name: marstech-uplink
+  description: "macOS system updater — Kotlin/GraalVM native binary"
+  longDescription: |
+    MarsTech-Uplink orchestrates all macOS package-manager and system updates
+    (Homebrew, SDKMAN, npm, uv, Cargo, pipx, GitHub CLI, and more) from a
+    single command. Compiled to a GraalVM native binary — no JVM required at runtime.
+  authors:
+    - Alkaphreak
+  license: MIT
+  links:
+    homepage: https://github.com/Alkaphreak/marstech-uplink
+
+release:
+  github:
+    owner: Alkaphreak
+    name: marstech-uplink
+    tagName: "v{{projectVersion}}"
+    releaseName: "v{{projectVersion}}"
+    overwrite: true
+    changelog:
+      formatted: ALWAYS
+      preset: conventional-commits
+      contributors:
+        enabled: false
+      hide:
+        uncategorized: true
+
+# Native binaries per platform — JReleaser zips each one as
+# marstech-uplink-{version}-{platform}.zip
+distributions:
+  marstech-uplink:
+    type: NATIVE_IMAGE
+    artifacts:
+      - path: "out/marstech-uplink-osx-x86_64"
+        platform: osx-x86_64
+      - path: "out/marstech-uplink-osx-aarch_64"
+        platform: osx-aarch_64
+
+# Fat JAR attached to the release as-is (no wrapping)
+files:
+  artifacts:
+    - path: "out/marstech-uplink.jar"

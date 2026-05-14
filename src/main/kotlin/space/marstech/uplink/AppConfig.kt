@@ -13,6 +13,7 @@ data class ToolsConfig(
     val npm: Boolean = true,
     val uv: Boolean = true,
     val rustup: Boolean = true,
+    val cargo: Boolean = true,
     val pipx: Boolean = true,
     val gh: Boolean = true,
     val macos: Boolean = true,
@@ -29,6 +30,7 @@ data class ToolsConfig(
         "npm"            -> npm
         "uv"             -> uv
         "rustup"         -> rustup
+        "cargo"          -> cargo
         "pipx"           -> pipx
         "gh"             -> gh
         "macos"          -> macos
@@ -113,6 +115,7 @@ data class AppConfig(
             |npm           = true
             |uv            = true
             |rustup        = true
+            |cargo         = true
             |pipx          = true
             |gh            = true
             |macos         = true
@@ -145,6 +148,7 @@ data class AppConfig(
                 "npm"           to "true",
                 "uv"            to "true",
                 "rustup"        to "true",
+                "cargo"         to "true",
                 "pipx"          to "true",
                 "gh"            to "true",
                 "macos"         to "true",
@@ -239,6 +243,7 @@ data class AppConfig(
                     npm           = bool("tools.npm",           d.tools.npm),
                     uv            = bool("tools.uv",            d.tools.uv),
                     rustup        = bool("tools.rustup",        d.tools.rustup),
+                    cargo         = bool("tools.cargo",         d.tools.cargo),
                     pipx          = bool("tools.pipx",          d.tools.pipx),
                     gh            = bool("tools.gh",            d.tools.gh),
                     macos         = bool("tools.macos",         d.tools.macos),

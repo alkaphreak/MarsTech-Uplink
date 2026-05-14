@@ -2,12 +2,28 @@
 
 macOS system updater — Kotlin/Maven CLI tool compiled to a GraalVM native binary. Manages Homebrew, SDKMAN, npm, and more from a single command.
 
+## Download
+
+Pre-built binaries are available on the [GitHub Releases](https://github.com/Alkaphreak/marstech-uplink/releases) page.
+
+```zsh
+# Apple Silicon (M-series)
+curl -sL https://github.com/Alkaphreak/marstech-uplink/releases/latest/download/marstech-uplink-osx-aarch_64.zip \
+  | tar -xz -C ~/.local/bin && chmod +x ~/.local/bin/marstech-uplink
+
+# Intel
+curl -sL https://github.com/Alkaphreak/marstech-uplink/releases/latest/download/marstech-uplink-osx-x86_64.zip \
+  | tar -xz -C ~/.local/bin && chmod +x ~/.local/bin/marstech-uplink
+```
+
+A fat JAR (requires Java 21+) is also attached to each release as `marstech-uplink.jar`.
+
 ## Requirements
 
-- Java 21+ (Eclipse Temurin recommended)
-- Maven 3.9+
-- macOS (Apple Silicon or Intel)
+- macOS (Apple Silicon or Intel — see [Platform compatibility](#platform-compatibility))
+- Java 21+ only needed to **build** or to run the fat JAR; the native binary has no runtime dependency
 - GraalVM JDK with `native-image` for native compilation (SDKMAN: `sdk install java 25.0.1-graalce`)
+- Maven 3.9+ for building
 
 ## Usage
 
@@ -21,19 +37,20 @@ marstech-uplink --help
 
 ### Tools for `--only`
 
-| Tool      | Description                      |
-|-----------|----------------------------------|
-| `brew`    | Homebrew formulae and casks      |
-| `sdkman`  | SDKMAN! candidates               |
-| `npm`     | npm and global packages          |
-| `uv`      | UV Python package manager        |
-| `codex`   | Codex CLI (Homebrew-managed)     |
-| `rustup`  | Rust toolchain                   |
-| `pipx`    | pipx-managed tools               |
-| `gh`      | GitHub CLI extensions            |
-| `macos`   | macOS software updates           |
-| `mas`     | Mac App Store applications       |
-| `ohmyzsh` | Oh My Zsh framework              |
+| Tool      | Description                          |
+|-----------|--------------------------------------|
+| `brew`    | Homebrew formulae and casks          |
+| `sdkman`  | SDKMAN! candidates                   |
+| `npm`     | npm and global packages              |
+| `uv`      | UV Python package manager            |
+| `codex`   | Codex CLI (Homebrew-managed)         |
+| `rustup`  | Rust toolchain                       |
+| `cargo`   | Cargo-installed binaries (`cargo-update`) |
+| `pipx`    | pipx-managed tools                   |
+| `gh`      | GitHub CLI extensions                |
+| `macos`   | macOS software updates               |
+| `mas`     | Mac App Store applications           |
+| `ohmyzsh` | Oh My Zsh framework                  |
 
 ## Build
 
@@ -55,11 +72,24 @@ mvn -Pnative package
 mvn -Pnative package && cp target/marstech-uplink ~/.local/bin/marstech-uplink && chmod +x ~/.local/bin/marstech-uplink
 ```
 
-Preferred automated flow (SDKMAN bootstrap + install + smoke test):
+Preferred automated flow (SDKMAN bootstrap + build + install + smoke test):
 
 ```zsh
 ./build-install.sh
 ```
+
+## Platform compatibility
+
+| Platform          | Binary type       | Status       | Notes                                      |
+|-------------------|-------------------|--------------|--------------------------------------------|
+| macOS Intel x86_64 | Native (x86_64)  | Supported    | Built on `macos-13` GitHub runner          |
+| macOS Apple Silicon (M-series) | Native (aarch64) | Supported | Built on `macos-latest` (ARM64) GitHub runner |
+| macOS Apple Silicon (M-series) | Intel binary via Rosetta 2 | Fallback | Runs transparently but slower than native |
+
+- The `build-install.sh` script always compiles a binary native to the machine it runs on.
+- GitHub Releases provide both `osx-x86_64` and `osx-aarch_64` pre-built binaries.
+- On Apple Silicon, always prefer the `osx-aarch_64` binary for best performance.
+- The fat JAR (`marstech-uplink.jar`) runs on any platform with Java 21+, but the tool itself only orchestrates macOS-specific commands.
 
 ## Project structure
 
@@ -70,8 +100,8 @@ src/main/kotlin/space/marstech/uplink/
 ├── Colors.kt        # ANSI color constants (jansi-managed TTY detection)
 ├── RunContext.kt    # run state, buffered output, tool cache
 ├── ProcessUtils.kt  # runProcess, captureOutput, runCaptured, commandExists
-├── Backups.kt       # backupShellConfigs, backupKeewebDb
-├── Updaters.kt      # all 11 update functions
+├── Backups.kt       # backupShellConfigs, backupKeewebDb, pruneShellSnapshots, pruneKeewebBackups
+├── Updaters.kt      # 12 update functions (brew, sdkman, npm, uv, codex, rustup, cargo, pipx, gh, macos, mas, ohmyzsh)
 ├── PreFlight.kt     # checkTouchIdSudo
 └── Summary.kt       # printSummary, sendNotification, phase headers
 ```
@@ -85,6 +115,7 @@ src/main/kotlin/space/marstech/uplink/
 | CLI       | picocli 4.7.6                |
 | ANSI      | jansi 2.4.1                  |
 | Native    | GraalVM native-maven-plugin  |
+| Release   | JReleaser 1.15.0             |
 | Testing   | JUnit 5 + Mockito-Kotlin     |
 
 ## Configuration
@@ -111,6 +142,12 @@ keeweb_backup_dir  = "~/Backup/Apps/KeeWeb"
 shell_snapshot_retention = 3
 # Number of KeeWeb database backups to keep per device
 keeweb_retention         = 5
+
+[tools]
+# Set to false to permanently skip a tool on every run
+cargo = true
+brew  = true
+# ... (all tools listed in the generated config)
 ```
 
 Changes take effect immediately on the next run — no restart needed.

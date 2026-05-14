@@ -62,6 +62,9 @@ chmod +x "${INSTALL_PATH}"
 echo "==> Smoke-testing installation..."
 "${INSTALL_PATH}" --dry-run --only brew
 
+echo "==> Smoke-testing backup path (dry-run — no files written)..."
+"${INSTALL_PATH}" --dry-run --backup-only
+
 echo ""
 echo "  Installed : ${INSTALL_PATH}"
 echo "  Version   : $("${INSTALL_PATH}" --version 2>&1 | head -1)"

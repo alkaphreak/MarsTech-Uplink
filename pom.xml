@@ -88,9 +88,6 @@
                             <goal>kapt</goal>
                         </goals>
                         <configuration>
-                            <sourceDirs>
-                                <sourceDir>src/main/kotlin</sourceDir>
-                            </sourceDirs>
                             <annotationProcessorPaths>
                                 <annotationProcessorPath>
                                     <groupId>info.picocli</groupId>
@@ -154,6 +151,15 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
+            </plugin>
+
+            <!-- Release automation — reads jreleaser.yml from project root.
+                 Dry run : mvn jreleaser:full-release -Djreleaser.dry.run=true
+                 Release : JRELEASER_GITHUB_TOKEN=<token> mvn jreleaser:full-release -->
+            <plugin>
+                <groupId>org.jreleaser</groupId>
+                <artifactId>jreleaser-maven-plugin</artifactId>
+                <version>1.15.0</version>
             </plugin>
         </plugins>
     </build>
