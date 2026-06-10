@@ -28,31 +28,34 @@ A fat JAR (requires Java 21+) is also attached to each release as `marstech-upli
 ## Usage
 
 ```zsh
-marstech-uplink                    # Run all updates
-marstech-uplink --dry-run          # Preview actions without executing
-marstech-uplink --only brew        # Run a single updater
-marstech-uplink --only selfupdate  # Check for a newer marstech-uplink and install it
-marstech-uplink --backup-only      # Backup shell configs and KeeWeb only
+marstech-uplink                       # Run all updates
+marstech-uplink --dry-run             # Preview actions without executing
+marstech-uplink --only brew           # Run a single updater
+marstech-uplink --only selfupdate     # Check for a newer marstech-uplink and install it
+marstech-uplink --backup-only         # Backup shell configs and KeeWeb only
+marstech-uplink --config ~/my.toml   # Use a custom config file
 marstech-uplink --help
 ```
 
 ### Tools for `--only`
 
-| Tool         | Description                                          |
-|--------------|------------------------------------------------------|
-| `brew`       | Homebrew formulae and casks                          |
-| `sdkman`     | SDKMAN! candidates                                   |
-| `npm`        | npm and global packages                              |
-| `uv`         | UV Python package manager                            |
-| `codex`      | Codex CLI (Homebrew-managed cask)                    |
-| `rustup`     | Rust toolchain                                       |
-| `cargo`      | Cargo-installed binaries (`cargo-update`)            |
-| `pipx`       | pipx-managed tools                                   |
-| `gh`         | GitHub CLI extensions                                |
-| `macos`      | macOS software updates                               |
-| `mas`        | Mac App Store applications                           |
-| `ohmyzsh`    | Oh My Zsh framework                                  |
+| Tool         | Description                                                                             |
+|--------------|-----------------------------------------------------------------------------------------|
+| `brew`       | Homebrew formulae and casks                                                             |
+| `sdkman`     | SDKMAN! candidates                                                                      |
+| `npm`        | npm and global packages                                                                 |
+| `uv`         | UV Python package manager                                                               |
+| `codex`      | Codex CLI (Homebrew-managed cask)                                                       |
+| `rustup`     | Rust toolchain                                                                          |
+| `cargo`      | Cargo-installed binaries (requires `cargo-update` crate)                               |
+| `pipx`       | pipx-managed tools                                                                      |
+| `gh`         | GitHub CLI extensions                                                                   |
+| `macos`      | macOS software updates                                                                  |
+| `mas`        | Mac App Store applications                                                              |
+| `ohmyzsh`    | Oh My Zsh framework                                                                     |
 | `selfupdate` | Self-update — checks GitHub Releases and replaces the binary if a newer version exists |
+
+> **Note:** `pip` runs automatically as part of every full update (`pip install --upgrade pip`) but is not yet supported by `--only`.
 
 ## Build
 
@@ -103,7 +106,7 @@ src/main/kotlin/space/marstech/uplink/
 ├── RunContext.kt    # run state, buffered output, tool cache
 ├── ProcessUtils.kt  # runProcess, captureOutput, runCaptured, commandExists
 ├── Backups.kt       # backupShellConfigs, backupKeewebDb, pruneShellSnapshots, pruneKeewebBackups
-├── Updaters.kt      # 13 update functions (brew, sdkman, npm, uv, codex, rustup, cargo, pipx, gh, macos, mas, ohmyzsh, selfupdate)
+├── Updaters.kt      # 14 update functions (brew, sdkman, npm, uv, codex, rustup, cargo, pipx, pip, gh, macos, mas, ohmyzsh, selfupdate)
 ├── PreFlight.kt     # checkTouchIdSudo
 └── Summary.kt       # printSummary, sendNotification, phase headers
 ```
@@ -138,18 +141,35 @@ shell_snapshot_dir = "~/MyWorkspace/My-Configs"
 keeweb_source      = "~/KeeWeb/myKeeweb.kdbx"
 # Destination folder for KeeWeb backups
 keeweb_backup_dir  = "~/Backup/Apps/KeeWeb"
+# Directory where daily log files are written
+log_dir            = "~/Library/Logs/marstech/marstech-uplink"
 
 [backups]
 # Number of shell-config snapshots to keep per device
 shell_snapshot_retention = 3
 # Number of KeeWeb database backups to keep per device
 keeweb_retention         = 5
+# Number of daily log files to keep
+log_retention            = 5
 
 [tools]
 # Set to false to permanently skip a tool on every run
-cargo = true
-brew  = true
-# ... (all tools listed in the generated config)
+brew          = true
+codex         = true
+sdkman        = true
+npm           = true
+uv            = true
+rustup        = true
+cargo         = true
+pipx          = true
+pip           = true
+gh            = true
+macos         = true
+mas           = true
+ohmyzsh       = true
+selfupdate    = true
+backup_shells = true
+backup_keeweb = true
 ```
 
 Changes take effect immediately on the next run — no restart needed.

@@ -5,7 +5,8 @@
 - Runtime starts in `src/main/kotlin/space/marstech/uplink/Main.kt`: `main()` -> `MacUpdateCommand.call()` -> `runUpdate()`.
 - `runUpdate()` is organized into fixed phases: pre-flight, backups, updates, final summary. Preserve that phase model when adding features.
 - `--backup-only` flag (`RunContext.backupOnly`) skips all phases except backups, then exits 0; pre-flight and updates are never called.
-- `--only <tool>` skips pre-flight and backups entirely — only the updater phase runs (see `Main.kt` lines 83–86).
+- `--only <tool>` skips pre-flight and backups entirely — only the updater phase runs (see `Main.kt` lines 83–86). Valid tools: `brew`, `sdkman`, `npm`, `uv`, `codex`, `rustup`, `cargo`, `pipx`, `gh`, `macos`, `mas`, `ohmyzsh`, `selfupdate`. (`pip` runs automatically but is not registered in `validTools` — `--only pip` is rejected.)
+- `--config <path>` overrides the default config file location (`Config.configFileOverride`).
 - Exit code: `runUpdate()` returns `1` if `ctx.summaryFailed` is non-empty, otherwise `0`.
 
 ## Core architecture
@@ -13,6 +14,8 @@
 - Most behavior is implemented as `RunContext` extension functions, not classes: see `Backups.kt`, `PreFlight.kt`, `Updaters.kt`, and `Summary.kt`.
 - Updaters run concurrently through `launchAsync(...)` in `Main.kt`; output is buffered per thread via `RunContext.taskBuffer` so logs do not interleave.
 - `brew` and `codex` are intentionally coupled: they run inside one async task because `codex` is upgraded through Homebrew and must come after `brewUpdate()`.
+- `selfUpdate()` runs **last** in the pipeline to avoid replacing the binary while other tasks are still in flight. It prefers `gh` CLI for tag lookup and falls back to the GitHub REST API via `curl`.
+- `pip` (`pipUpdate()`) upgrades `pip`/`pip3` itself via `pip install --upgrade pip`; it is wired into `buildUpdateFutures` and controlled by `[tools] pip` in `config.toml`, but is **not** in `validTools` so `--only pip` is rejected at the CLI layer.
 - Tool detection is front-loaded in `buildToolsPresent()` (`ProcessUtils.kt`) and then read through `RunContext.toolPresent()`; tests often stub this map instead of invoking real `which` calls.
 - `RunContext.shouldRun(tool)` is the single gate controlling whether an updater executes: `--only` overrides config; otherwise the `[tools]` section of `config.toml` decides. Always call `shouldRun()` (via `launchIf`) rather than invoking updaters directly.
 
@@ -28,13 +31,15 @@
 
 ## Filesystem and external integration points
 - `Config.repoRoot` resolves through `AppConfig` (loaded from the user config file); shell snapshots are written under `confs/snapshots/...` relative to that root.
+- `Config.UPLINK_VERSION` is the single source of truth for the current version string; used by `selfUpdate()` to compare against the latest GitHub Release tag.
+- Task durations are accumulated in `RunContext.taskDurations` and printed as a `Timings:` table in the final summary (sorted slowest-first).
 - KeeWeb source and backup destination are configured via `AppConfig.keewebSource` / `AppConfig.keewebBackupDir`; paths default to `~/KeeWeb/myKeeweb.kdbx` and `~/Backup/Apps/KeeWeb`.
 - KeeWeb backups are device-scoped: `backupKeewebDb()` writes files as `YYYY-MM-DD-<device>-<source>.kdbx` and enforces retention per device pattern, not globally per source filename.
 - User config file: `~/Library/Application Support/marstech/marstech-uplink/config.toml` — auto-created with placeholder defaults on first run. See `AppConfig.kt` for all keys.
-  - The `[tools]` section maps every tool name to a boolean; set `ohmyzsh = false` to permanently skip a tool without touching the CLI. Managed via `ToolsConfig` and read through `RunContext.shouldRun()`.
+  - The `[tools]` section maps every tool name to a boolean; set `ohmyzsh = false` to permanently skip a tool without touching the CLI. Managed via `ToolsConfig` and read through `RunContext.shouldRun()`. Includes `backup_shells` and `backup_keeweb` flags for the backup phase.
   - If a key is missing from an existing config file, `AppConfig.repairMissingKeys()` injects it with its default value in-place on every startup — no manual migration needed when adding new config keys.
 - Logs are always appended to `~/Library/Logs/marstech/marstech-uplink/marstech-uplink-YYYY-MM-DD.log`.
-- External commands currently orchestrated include: `brew`, `sdk`, `npm`/`node`, `uv`, `rustup`, `cargo`/`cargo-install-update`, `pipx`, `gh`, `softwareupdate`, `mas`, `omz`, `zsh`, `osascript`, `scutil`, and `hostname`.
+- External commands currently orchestrated include: `brew`, `sdk`, `npm`/`node`, `uv`, `rustup`, `cargo`/`cargo-install-update`, `pipx`, `pip`/`pip3`, `gh`, `softwareupdate`, `mas`, `omz`, `zsh`, `osascript`, `scutil`, `hostname`, `curl`, `unzip`.
 - ANSI colors are centralized in `Colors.kt` and rely on Jansi setup/teardown in `Main.kt`; do not add manual TTY detection.
 
 ## Build, test, and debug workflow
