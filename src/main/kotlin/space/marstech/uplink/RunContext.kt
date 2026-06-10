@@ -1,5 +1,6 @@
 package space.marstech.uplink
 
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -19,6 +20,13 @@ class RunContext(
     val summaryWarnings = CopyOnWriteArrayList<String>()
     val restartRequired = AtomicBoolean(false)
     val startTimeMs: Long = System.currentTimeMillis()
+
+    /**
+     * Per-task elapsed time in milliseconds, keyed by the task label (e.g. "brew", "sdkman").
+     * Populated by [launchAsync] after each task completes. Used in the SUMMARY to identify
+     * slow tools at a glance.
+     */
+    val taskDurations = ConcurrentHashMap<String, Long>()
 
     /**
      * Pre-populated before Phase 2 starts.

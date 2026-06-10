@@ -12,6 +12,8 @@ import java.time.format.DateTimeFormatter
  */
 object Config {
 
+    const val UPLINK_VERSION = "1.0.0"
+
     val HOME: String = System.getenv("HOME") ?: error("HOME environment variable not set")
     val dateStr: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
 

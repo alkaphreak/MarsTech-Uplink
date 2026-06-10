@@ -203,4 +203,111 @@ class UpdatersTest {
                       ctx.summarySkipped.any { it.contains("Oh My Zsh") }
         assertTrue(handled, "Expected Oh My Zsh summary entry")
     }
+
+    // -------------------------------------------------------------------------
+    // parseBrewFailedCasks (jalon 25 — internal, unit-testable)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `parseBrewFailedCasks extracts cask names from Problems block`() {
+        val output = """
+            Some packages upgraded successfully.
+            Error: Problems with multiple casks:
+            docker-desktop: It seems there is already an App at '/Applications/Docker.app'.
+            another-cask: Failed to install
+        """.trimIndent()
+        val result = parseBrewFailedCasks(output)
+        assertTrue(result.contains("docker-desktop"), "Expected docker-desktop in $result")
+        assertTrue(result.contains("another-cask"), "Expected another-cask in $result")
+    }
+
+    @Test
+    fun `parseBrewFailedCasks returns empty list when no Problems block`() {
+        val result = parseBrewFailedCasks("brew upgrade --greedy\nAll good.")
+        assertTrue(result.isEmpty())
+    }
+
+    // -------------------------------------------------------------------------
+    // parseBrewCannotUpgradeCasks (jalon 25 — internal, unit-testable)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `parseBrewCannotUpgradeCasks extracts cask name from cannot be upgraded warning`() {
+        val output = """
+            ==> Upgrading 3 outdated packages:
+            Warning: The cask 'docker-desktop' cannot be upgraded as-is
+            Some other line
+        """.trimIndent()
+        val result = parseBrewCannotUpgradeCasks(output)
+        assertEquals(listOf("docker-desktop"), result)
+    }
+
+    @Test
+    fun `parseBrewCannotUpgradeCasks returns empty list when no such warning`() {
+        val result = parseBrewCannotUpgradeCasks("==> Upgrading 1 outdated package")
+        assertTrue(result.isEmpty())
+    }
+
+    // -------------------------------------------------------------------------
+    // extractDeprecatedFromDoctorOutput (jalon 27 — internal, unit-testable)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `extractDeprecatedFromDoctorOutput extracts formula and cask names`() {
+        val output = """
+            Warning: Some installed formulae are deprecated and should be uninstalled.
+            Run `brew cleanup` to uninstall these formulae:
+            angry-ip-scanner (cask): Deprecated because it has been discontinued upstream!
+            python@3.9: Deprecated because it is end-of-life upstream! Use python@3.13 instead.
+        """.trimIndent()
+        val result = extractDeprecatedFromDoctorOutput(output)
+        assertTrue(result.contains("angry-ip-scanner"), "Expected angry-ip-scanner in $result")
+        assertTrue(result.contains("python@3.9"), "Expected python@3.9 in $result")
+    }
+
+    @Test
+    fun `extractDeprecatedFromDoctorOutput returns empty list when no deprecated packages`() {
+        val result = extractDeprecatedFromDoctorOutput("Your system is ready to brew.")
+        assertTrue(result.isEmpty())
+    }
+
+    // -------------------------------------------------------------------------
+    // selfUpdate (jalon 29)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `selfUpdate in dry-run adds marstech-uplink to summaryUpdated`() {
+        val ctx = dryCtx()
+        ctx.selfUpdate()
+        assertTrue(ctx.summaryUpdated.any { it.contains("marstech-uplink") })
+    }
+
+    // -------------------------------------------------------------------------
+    // compareVersions (jalon 29 — internal, unit-testable)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `compareVersions returns positive when a is greater`() {
+        assertTrue(compareVersions("1.1.0", "1.0.0") > 0)
+        assertTrue(compareVersions("2.0.0", "1.9.9") > 0)
+        assertTrue(compareVersions("1.0.1", "1.0.0") > 0)
+    }
+
+    @Test
+    fun `compareVersions returns negative when a is lesser`() {
+        assertTrue(compareVersions("1.0.0", "1.1.0") < 0)
+        assertTrue(compareVersions("0.9.9", "1.0.0") < 0)
+    }
+
+    @Test
+    fun `compareVersions returns zero for equal versions`() {
+        assertEquals(0, compareVersions("1.0.0", "1.0.0"))
+        assertEquals(0, compareVersions("2.3.4", "2.3.4"))
+    }
+
+    @Test
+    fun `compareVersions handles different segment counts`() {
+        assertTrue(compareVersions("1.1", "1.0.0") > 0)
+        assertEquals(0, compareVersions("1.0", "1.0.0"))
+    }
 }

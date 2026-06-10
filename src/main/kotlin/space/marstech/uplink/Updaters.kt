@@ -1,10 +1,10 @@
 package space.marstech.uplink
 
+import space.marstech.uplink.Colors.GREEN
 import space.marstech.uplink.Colors.RED
 import space.marstech.uplink.Colors.RESET
 import space.marstech.uplink.Colors.YELLOW
 import java.io.File
-import java.util.concurrent.CompletableFuture
 
 fun RunContext.brewUpdate() {
     section("Homebrew update")
@@ -12,19 +12,18 @@ fun RunContext.brewUpdate() {
         brewDryRun(); return
     }
 
-    // Run 'brew outdated' concurrently with 'brew update' — both are read-only
-    val outdatedFuture = CompletableFuture.supplyAsync { captureOutput("brew", "outdated", "--verbose") }
+    // Run 'brew update' first, then 'brew outdated' sequentially to avoid lock contention
+    // (both commands share the same lockfile; running them concurrently causes 'already locked')
     val updateResult = runCaptured("brew", "update")
     bufPrint(updateResult.output)
 
     if (updateResult.exitCode != 0) {
-        outdatedFuture.cancel(true)
         handleBrewUpdateFailure(updateResult)
         return
     }
 
     section("Homebrew — outdated packages")
-    val outdated = runCatching { outdatedFuture.get() }.getOrNull()
+    val outdated = captureOutput("brew", "outdated", "--verbose")
     bufPrint(outdated.takeUnless { it.isNullOrBlank() } ?: "All Homebrew packages are up to date")
 
     val upgradeExit = brewUpgrade()
@@ -70,6 +69,11 @@ private fun RunContext.brewUpgrade(): Int {
         else
             summaryWarnings += "Some brew packages failed to upgrade"
     }
+    // Surface casks that brew refuses to upgrade as-is (even on exit 0)
+    parseBrewCannotUpgradeCasks(result.output).forEach { cask ->
+        bufPrint("${YELLOW}Warning: cask '$cask' cannot be upgraded as-is — manual action required$RESET")
+        summaryWarnings += "brew: '$cask' cannot be upgraded as-is — run: brew reinstall --cask $cask"
+    }
     brewSurfaceDeprecationWarnings(result.output)
     return result.exitCode
 }
@@ -78,7 +82,7 @@ private fun RunContext.brewUpgrade(): Int {
  * Extracts cask names from a "Error: Problems with multiple casks:" block
  * that brew appends when some cask upgrades fail.
  */
-private fun parseBrewFailedCasks(output: String): List<String> {
+internal fun parseBrewFailedCasks(output: String): List<String> {
     val section = output.substringAfter("Error: Problems with multiple casks:", "")
     if (section.isBlank()) return emptyList()
     return section.lines()
@@ -86,6 +90,16 @@ private fun parseBrewFailedCasks(output: String): List<String> {
         .map { it.substringBefore(":").trim() }
         .filter { it.isNotBlank() }
 }
+
+/**
+ * Extracts cask names from brew's "Warning: The cask '<name>' cannot be upgraded as-is" lines.
+ * These appear in the output even when the exit code is 0, so they are easy to miss.
+ */
+internal fun parseBrewCannotUpgradeCasks(output: String): List<String> =
+    Regex("""Warning: The cask '([^']+)' cannot be upgraded as-is""", RegexOption.IGNORE_CASE)
+        .findAll(output)
+        .map { it.groupValues[1] }
+        .toList()
 
 private fun RunContext.brewSurfaceDeprecationWarnings(output: String) {
     val deprecatedPattern = Regex("""Warning:\s+\S+\s+(is deprecated|has been deprecated)""", RegexOption.IGNORE_CASE)
@@ -113,11 +127,48 @@ private fun RunContext.brewCleanupAndDoctor(upgradeExit: Int) {
         .firstOrNull { it.contains("freed approximately") }
         ?.trim()
         ?.let { bufPrint(it) }
-    if (upgradeExit != 0) {
-        section("Homebrew doctor (triggered by upgrade failure)")
-        runProcess("brew", "doctor")
+
+    // Always run 'brew doctor' — not just on upgrade failures — to surface deprecated packages
+    val doctorSection = if (upgradeExit != 0) "Homebrew doctor (triggered by upgrade failure)" else "Homebrew doctor"
+    section(doctorSection)
+    val doctorResult = runCaptured("brew", "doctor")
+    val doctorOut = doctorResult.output
+    // Suppress the "Your system is ready to brew." success line to avoid noise
+    val doctorFiltered = doctorOut.lines()
+        .filter { !it.trim().equals("Your system is ready to brew.", ignoreCase = true) }
+        .joinToString("\n").trim()
+    if (doctorFiltered.isNotBlank()) bufPrint(doctorFiltered)
+
+    // Surface deprecated packages found by brew doctor into summaryWarnings
+    extractDeprecatedFromDoctorOutput(doctorOut).forEach { name ->
+        if (summaryWarnings.none { it.contains(name) })
+            summaryWarnings += "brew doctor: '$name' is deprecated — consider: brew uninstall $name"
     }
 }
+
+/**
+ * Extracts formula/cask names that brew doctor reports as deprecated.
+ * Matches lines like: "angry-ip-scanner (cask): Deprecated because ..."
+ *                  or "python@3.9: Deprecated because ..."
+ */
+internal fun extractDeprecatedFromDoctorOutput(output: String): List<String> =
+    output.lines()
+        .filter { line ->
+            val t = line.trim()
+            t.isNotBlank()
+                && t.contains(": Deprecated", ignoreCase = false)
+                && !t.startsWith("Warning:")
+                && !t.startsWith("Run ")
+        }
+        .map { line ->
+            line.trim()
+                .substringBefore(":")
+                .replace(Regex("""\s*\(cask\)\s*"""), "")
+                .trim()
+                .split(" ").first()
+        }
+        .filter { it.isNotBlank() }
+        .distinct()
 
 private fun RunContext.brewLinkUnlinkedKegs() {
     section("Linking unlinked kegs")
@@ -129,9 +180,22 @@ private fun RunContext.brewLinkUnlinkedKegs() {
     bufPrint("Found unlinked kegs: ${kegs.joinToString(", ")}")
     kegs.forEach { keg ->
         bufPrint("Linking $keg...")
-        if (runProcess("brew", "link", "--overwrite", keg) != 0) {
-            bufPrint("Warning: Failed to link $keg")
-            summaryWarnings += "Failed to link keg: $keg"
+        val result = runCaptured("brew", "link", "--overwrite", keg)
+        if (result.exitCode != 0) {
+            // Detect "is not writable" — typically caused by Docker Desktop owning /usr/local/lib/docker
+            val notWritableLine = result.output.lines()
+                .firstOrNull { it.contains("is not writable", ignoreCase = true) }
+            if (notWritableLine != null) {
+                // Extract the offending directory from the error line
+                val dir = notWritableLine.trim()
+                    .substringBefore(" is not writable").trim()
+                    .split(" ").lastOrNull() ?: "the directory"
+                bufPrint("${YELLOW}Warning: Cannot link $keg — $dir is not writable$RESET")
+                summaryWarnings += "brew link $keg failed: $dir is not writable — fix: sudo chown -R \$(whoami) $dir && brew link --overwrite $keg"
+            } else {
+                bufPrint("${YELLOW}Warning: Failed to link $keg$RESET")
+                summaryWarnings += "Failed to link keg: $keg"
+            }
         }
     }
 }
@@ -185,9 +249,10 @@ fun RunContext.codexUpdate() {
         return
     }
 
-    if (runProcess("brew", "outdated", "codex") == 0) {
+    // codex is a cask, not a formula — must use --cask to avoid "No such keg" error
+    if (runProcess("brew", "outdated", "--cask", "codex") == 0) {
         bufPrint("Codex CLI is outdated, upgrading...")
-        if (runProcess("brew", "upgrade", "codex") != 0) {
+        if (runProcess("brew", "upgrade", "--cask", "codex") != 0) {
             bufPrint("Warning: Failed to upgrade Codex CLI")
             summaryWarnings += "Failed to upgrade Codex CLI"
         } else {
@@ -422,6 +487,33 @@ fun RunContext.pipxUpdate() {
     }
 }
 
+fun RunContext.pipUpdate() {
+    section("pip upgrade")
+
+    val pipCmd = when {
+        toolPresent("pip")  -> "pip"
+        toolPresent("pip3") -> "pip3"
+        else -> {
+            bufPrint("pip / pip3 not found, skipping")
+            summarySkipped += "pip (not installed)"
+            return
+        }
+    }
+
+    if (dryRun) {
+        bufPrint("[DRY-RUN] Would run: $pipCmd install --upgrade pip")
+        summaryUpdated += "pip"
+        return
+    }
+
+    if (runProcess(pipCmd, "install", "--upgrade", "pip") != 0) {
+        bufPrint("Warning: pip upgrade failed")
+        summaryWarnings += "pip upgrade failed"
+    } else {
+        summaryUpdated += "pip"
+    }
+}
+
 fun RunContext.ghExtUpdate() {
     section("GitHub CLI extensions update")
 
@@ -528,4 +620,149 @@ fun RunContext.ohmyzshUpdate() {
     } else {
         summaryUpdated += "Oh My Zsh"
     }
+}
+
+// =============================================================================
+// Self-update
+// =============================================================================
+
+private const val GITHUB_OWNER = "Alkaphreak"
+private const val GITHUB_REPO  = "marstech-uplink"
+
+fun RunContext.selfUpdate() {
+    section("Self-update check")
+
+    if (dryRun) {
+        bufPrint("[DRY-RUN] Current version : ${Config.UPLINK_VERSION}")
+        bufPrint("[DRY-RUN] Would check GitHub ($GITHUB_OWNER/$GITHUB_REPO) for a newer version")
+        summaryUpdated += "marstech-uplink (self-update — dry-run)"
+        return
+    }
+
+    val latestTag = fetchLatestReleaseTag()
+    if (latestTag == null) {
+        bufPrint("${YELLOW}Could not reach GitHub to check for updates$RESET")
+        summaryWarnings += "marstech-uplink: could not check for updates (no network or rate limited)"
+        return
+    }
+
+    val latestVersion = latestTag.trimStart('v')
+    bufPrint("Current version : ${Config.UPLINK_VERSION}")
+    bufPrint("Latest release  : $latestVersion ($latestTag)")
+
+    if (compareVersions(latestVersion, Config.UPLINK_VERSION) <= 0) {
+        bufPrint("marstech-uplink is already at the latest version")
+        summarySkipped += "marstech-uplink self-update (already at ${Config.UPLINK_VERSION})"
+        return
+    }
+
+    val arch = captureOutput("uname", "-m")?.trim() ?: "x86_64"
+    val assetSuffix = if (arch == "arm64") "aarch_64" else "x86_64"
+    val assetName   = "marstech-uplink-osx-$assetSuffix.zip"
+    val downloadUrl = "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases/download/$latestTag/$assetName"
+
+    val installPath = detectInstallPath()
+    if (installPath == null) {
+        bufPrint("${YELLOW}marstech-uplink not found in PATH or ~/.local/bin — skipping self-update$RESET")
+        summarySkipped += "marstech-uplink self-update (install path not found)"
+        return
+    }
+
+    bufPrint("Updating ${Config.UPLINK_VERSION} → $latestVersion  [$arch / $assetName]")
+    bufPrint("Install target  : $installPath")
+
+    val tmpZip = File(System.getProperty("java.io.tmpdir"), "marstech-uplink-update-$latestTag.zip")
+    val tmpDir = File(System.getProperty("java.io.tmpdir"), "marstech-uplink-update-$latestTag")
+    try {
+        bufPrint("Downloading $assetName...")
+        val dlResult = runCaptured(
+            "curl", "-fsSL", "--max-time", "60", "-o", tmpZip.absolutePath, downloadUrl,
+            timeoutSeconds = 70
+        )
+        if (dlResult.exitCode != 0) {
+            bufPrint("${RED}Download failed (exit ${dlResult.exitCode})$RESET")
+            if (dlResult.output.isNotBlank()) bufPrint(dlResult.output)
+            summaryFailed += "marstech-uplink self-update (download failed)"
+            return
+        }
+
+        tmpDir.mkdirs()
+        val unzipResult = runCaptured("unzip", "-o", "-d", tmpDir.absolutePath, tmpZip.absolutePath)
+        if (unzipResult.exitCode != 0) {
+            bufPrint("${RED}Unzip failed$RESET")
+            if (unzipResult.output.isNotBlank()) bufPrint(unzipResult.output)
+            summaryFailed += "marstech-uplink self-update (unzip failed)"
+            return
+        }
+
+        val binaryName = "marstech-uplink-osx-$assetSuffix"
+        val newBinary  = tmpDir.walkTopDown().firstOrNull { it.name == binaryName && it.isFile }
+        if (newBinary == null) {
+            bufPrint("${RED}Binary '$binaryName' not found in downloaded archive$RESET")
+            summaryFailed += "marstech-uplink self-update (binary not found in archive)"
+            return
+        }
+
+        newBinary.setExecutable(true)
+        val mvResult = runCaptured("mv", newBinary.absolutePath, installPath)
+        if (mvResult.exitCode != 0) {
+            bufPrint("${RED}Failed to install new binary at $installPath$RESET")
+            bufPrint("Hint: check write permissions — try: sudo chown \$(whoami) $installPath")
+            summaryFailed += "marstech-uplink self-update (install failed — permission denied?)"
+            return
+        }
+
+        bufPrint("${GREEN}Updated: ${Config.UPLINK_VERSION} → $latestVersion$RESET")
+        bufPrint("Restart your terminal for the new version to take effect.")
+        summaryUpdated += "marstech-uplink ${Config.UPLINK_VERSION} → $latestVersion"
+    } finally {
+        runCatching { tmpZip.delete() }
+        runCatching { tmpDir.deleteRecursively() }
+    }
+}
+
+private fun RunContext.detectInstallPath(): String? {
+    val fromWhich = captureOutput("which", "marstech-uplink")?.trim()
+    if (!fromWhich.isNullOrBlank()) return fromWhich
+    val fallback = "${Config.HOME}/.local/bin/marstech-uplink"
+    return if (File(fallback).exists()) fallback else null
+}
+
+private fun RunContext.fetchLatestReleaseTag(): String? {
+    // Prefer gh CLI if available — may be authenticated for higher rate limits
+    if (toolPresent("gh")) {
+        val tag = captureOutput(
+            "gh", "release", "view",
+            "--repo", "$GITHUB_OWNER/$GITHUB_REPO",
+            "--json", "tagName",
+            "--jq", ".tagName",
+            timeoutSeconds = 10
+        )?.trim()
+        if (!tag.isNullOrBlank()) return tag
+    }
+    // Fallback: GitHub REST API via curl (public repo, no auth required)
+    val json = captureOutput(
+        "curl", "-fsSL", "--max-time", "10",
+        "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest",
+        timeoutSeconds = 15
+    )
+    if (!json.isNullOrBlank()) {
+        return Regex(""""tag_name"\s*:\s*"([^"]+)"""").find(json)?.groupValues?.get(1)
+    }
+    return null
+}
+
+/**
+ * Compares two dotted version strings (e.g. "1.2.3" vs "1.3.0").
+ * Returns positive when [a] > [b], negative when [a] < [b], 0 when equal.
+ */
+internal fun compareVersions(a: String, b: String): Int {
+    val aParts = a.split(".").mapNotNull { it.toIntOrNull() }
+    val bParts = b.split(".").mapNotNull { it.toIntOrNull() }
+    val maxLen = maxOf(aParts.size, bParts.size)
+    for (i in 0 until maxLen) {
+        val diff = aParts.getOrElse(i) { 0 } - bParts.getOrElse(i) { 0 }
+        if (diff != 0) return diff
+    }
+    return 0
 }

@@ -9,6 +9,28 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `selfUpdate()` updater — checks GitHub Releases for a newer version, downloads the correct
+  platform binary (`aarch_64` or `x86_64`), and replaces the installed binary atomically via `mv`
+- `selfupdate` config key in `[tools]` section — disable with `selfupdate = false` in `config.toml`
+- `compareVersions()` — semver comparison helper (internal, unit-tested)
+- Task timing breakdown in SUMMARY terminal (`Timings:` table, sorted slowest-first) and in log
+- `Config.UPLINK_VERSION` constant — single source of truth for the current version string
+- `parseBrewCannotUpgradeCasks()` — detects `Warning: The cask '...' cannot be upgraded as-is`
+  lines in `brew upgrade` output; routes to `summaryWarnings` with a `brew reinstall --cask` hint
+- `extractDeprecatedFromDoctorOutput()` — parses `brew doctor` deprecated formula/cask names
+- `brew doctor` now always runs (not only on upgrade failure); deprecated packages surface in SUMMARY
+
+### Fixed
+
+- Race condition between `brew outdated` and `brew update`: `CompletableFuture.supplyAsync`
+  removed — both commands now run sequentially, eliminating `lockf: already locked` errors
+- `codexUpdate()` now uses `--cask` flag (`brew outdated --cask codex` / `brew upgrade --cask codex`),
+  fixing `Error: No such keg: /usr/local/Cellar/codex`
+- `brewLinkUnlinkedKegs()` now uses `runCaptured` instead of `runProcess` — detects
+  `is not writable` errors and surfaces an actionable `sudo chown` fix in `summaryWarnings`
+
 ---
 
 ## [1.0.0] — 2026-05-14

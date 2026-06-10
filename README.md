@@ -28,29 +28,31 @@ A fat JAR (requires Java 21+) is also attached to each release as `marstech-upli
 ## Usage
 
 ```zsh
-marstech-uplink                 # Run all updates
-marstech-uplink --dry-run       # Preview actions without executing
-marstech-uplink --only brew     # Run a single updater
-marstech-uplink --backup-only   # Backup shell configs and KeeWeb only
+marstech-uplink                    # Run all updates
+marstech-uplink --dry-run          # Preview actions without executing
+marstech-uplink --only brew        # Run a single updater
+marstech-uplink --only selfupdate  # Check for a newer marstech-uplink and install it
+marstech-uplink --backup-only      # Backup shell configs and KeeWeb only
 marstech-uplink --help
 ```
 
 ### Tools for `--only`
 
-| Tool      | Description                          |
-|-----------|--------------------------------------|
-| `brew`    | Homebrew formulae and casks          |
-| `sdkman`  | SDKMAN! candidates                   |
-| `npm`     | npm and global packages              |
-| `uv`      | UV Python package manager            |
-| `codex`   | Codex CLI (Homebrew-managed)         |
-| `rustup`  | Rust toolchain                       |
-| `cargo`   | Cargo-installed binaries (`cargo-update`) |
-| `pipx`    | pipx-managed tools                   |
-| `gh`      | GitHub CLI extensions                |
-| `macos`   | macOS software updates               |
-| `mas`     | Mac App Store applications           |
-| `ohmyzsh` | Oh My Zsh framework                  |
+| Tool         | Description                                          |
+|--------------|------------------------------------------------------|
+| `brew`       | Homebrew formulae and casks                          |
+| `sdkman`     | SDKMAN! candidates                                   |
+| `npm`        | npm and global packages                              |
+| `uv`         | UV Python package manager                            |
+| `codex`      | Codex CLI (Homebrew-managed cask)                    |
+| `rustup`     | Rust toolchain                                       |
+| `cargo`      | Cargo-installed binaries (`cargo-update`)            |
+| `pipx`       | pipx-managed tools                                   |
+| `gh`         | GitHub CLI extensions                                |
+| `macos`      | macOS software updates                               |
+| `mas`        | Mac App Store applications                           |
+| `ohmyzsh`    | Oh My Zsh framework                                  |
+| `selfupdate` | Self-update — checks GitHub Releases and replaces the binary if a newer version exists |
 
 ## Build
 
@@ -101,7 +103,7 @@ src/main/kotlin/space/marstech/uplink/
 ├── RunContext.kt    # run state, buffered output, tool cache
 ├── ProcessUtils.kt  # runProcess, captureOutput, runCaptured, commandExists
 ├── Backups.kt       # backupShellConfigs, backupKeewebDb, pruneShellSnapshots, pruneKeewebBackups
-├── Updaters.kt      # 12 update functions (brew, sdkman, npm, uv, codex, rustup, cargo, pipx, gh, macos, mas, ohmyzsh)
+├── Updaters.kt      # 13 update functions (brew, sdkman, npm, uv, codex, rustup, cargo, pipx, gh, macos, mas, ohmyzsh, selfupdate)
 ├── PreFlight.kt     # checkTouchIdSudo
 └── Summary.kt       # printSummary, sendNotification, phase headers
 ```

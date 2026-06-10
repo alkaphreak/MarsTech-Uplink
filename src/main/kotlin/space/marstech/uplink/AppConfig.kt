@@ -15,10 +15,12 @@ data class ToolsConfig(
     val rustup: Boolean = true,
     val cargo: Boolean = true,
     val pipx: Boolean = true,
+    val pip: Boolean = true,
     val gh: Boolean = true,
     val macos: Boolean = true,
     val mas: Boolean = true,
     val ohmyzsh: Boolean = true,
+    val selfupdate: Boolean = true,
     val backupShells: Boolean = true,
     val backupKeeweb: Boolean = true,
 ) {
@@ -32,10 +34,14 @@ data class ToolsConfig(
         "rustup"         -> rustup
         "cargo"          -> cargo
         "pipx"           -> pipx
+        "pip"            -> pip
         "gh"             -> gh
         "macos"          -> macos
         "mas"            -> mas
         "ohmyzsh"        -> ohmyzsh
+        "selfupdate",
+        "self-update",
+        "self_update"    -> selfupdate
         "backup-shells",
         "backup_shells"  -> backupShells
         "backup-keeweb",
@@ -117,10 +123,12 @@ data class AppConfig(
             |rustup        = true
             |cargo         = true
             |pipx          = true
+            |pip           = true
             |gh            = true
             |macos         = true
             |mas           = true
             |ohmyzsh       = true
+            |selfupdate    = true
             |backup_shells = true
             |backup_keeweb = true
         """.trimMargin()
@@ -150,10 +158,12 @@ data class AppConfig(
                 "rustup"        to "true",
                 "cargo"         to "true",
                 "pipx"          to "true",
+                "pip"           to "true",
                 "gh"            to "true",
                 "macos"         to "true",
                 "mas"           to "true",
                 "ohmyzsh"       to "true",
+                "selfupdate"    to "true",
                 "backup_shells" to "true",
                 "backup_keeweb" to "true",
             ),
@@ -245,10 +255,12 @@ data class AppConfig(
                     rustup        = bool("tools.rustup",        d.tools.rustup),
                     cargo         = bool("tools.cargo",         d.tools.cargo),
                     pipx          = bool("tools.pipx",          d.tools.pipx),
+                    pip           = bool("tools.pip",           d.tools.pip),
                     gh            = bool("tools.gh",            d.tools.gh),
                     macos         = bool("tools.macos",         d.tools.macos),
                     mas           = bool("tools.mas",           d.tools.mas),
                     ohmyzsh       = bool("tools.ohmyzsh",       d.tools.ohmyzsh),
+                    selfupdate    = bool("tools.selfupdate",    d.tools.selfupdate),
                     backupShells  = bool("tools.backup_shells", d.tools.backupShells),
                     backupKeeweb  = bool("tools.backup_keeweb", d.tools.backupKeeweb),
                 ),

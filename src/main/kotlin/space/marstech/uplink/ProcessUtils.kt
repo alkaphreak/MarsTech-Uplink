@@ -110,7 +110,7 @@ fun RunContext.runCaptured(vararg cmd: String, workDir: File? = null, timeoutSec
  */
 fun buildToolsPresent(): Map<String, Boolean> {
     val tools = setOf(
-        "brew", "mas", "npm", "node", "uv", "rustup", "pipx",
+        "brew", "mas", "npm", "node", "uv", "rustup", "pipx", "pip", "pip3",
         "gh", "omz", "softwareupdate", "codex", "cargo"
     )
     return tools

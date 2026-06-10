@@ -63,6 +63,14 @@ private fun RunContext.printSummaryTable(elapsed: String) {
     if (summaryWarnings.isNotEmpty())
         println("${YELLOW}Warnings:     ${summaryWarnings.joinToString("; ")}$RESET")
     println("Duration:     $elapsed")
+    if (taskDurations.isNotEmpty()) {
+        println("Timings:")
+        taskDurations.entries
+            .sortedByDescending { it.value }
+            .forEach { (tool, ms) ->
+                println("  $CYAN%-14s$RESET %s".format(tool, formatElapsed(ms)))
+            }
+    }
     println("$BOLD===============================================$RESET")
     println()
 }
@@ -107,6 +115,12 @@ private fun RunContext.appendSummaryLog(elapsed: String) {
         if (summaryFailed.isNotEmpty()) appendLine("Failed:   ${summaryFailed.joinToString(", ")}")
         if (summaryWarnings.isNotEmpty()) appendLine("Warnings: ${summaryWarnings.joinToString("; ")}")
         appendLine("Duration: $elapsed")
+        if (taskDurations.isNotEmpty()) {
+            appendLine("Timings:")
+            taskDurations.entries
+                .sortedByDescending { it.value }
+                .forEach { (tool, ms) -> appendLine("  %-14s %s".format(tool, formatElapsed(ms))) }
+        }
         if (restartRequired.get()) appendLine("RESTART REQUIRED")
     })
 }

@@ -23,7 +23,7 @@ import kotlin.system.exitProcess
     version = ["marstech-uplink 1.0.0"],
     footer = [
         "",
-        "Tools for --only: brew  sdkman  npm  uv  codex  rustup  cargo  pipx  gh  macos  mas  ohmyzsh",
+        "Tools for --only: brew  sdkman  npm  uv  codex  rustup  cargo  pipx  pip  gh  macos  mas  ohmyzsh  selfupdate",
         "",
         "Examples:",
         "  marstech-uplink",
@@ -48,7 +48,7 @@ class MacUpdateCommand : Callable<Int> {
 
     @Option(
         names = ["--only"],
-        description = ["Run a single updater. Valid: brew, sdkman, npm, uv, codex, rustup, cargo, pipx, gh, macos, mas, ohmyzsh"]
+        description = ["Run a single updater. Valid: brew, sdkman, npm, uv, codex, rustup, cargo, pipx, pip, gh, macos, mas, ohmyzsh, selfupdate"]
     )
     var onlyTool: String? = null
 
@@ -59,7 +59,7 @@ class MacUpdateCommand : Callable<Int> {
     var configPath: String? = null
 
     private val validTools = setOf(
-        "brew", "sdkman", "npm", "uv", "codex", "rustup", "cargo", "pipx", "gh", "macos", "mas", "ohmyzsh"
+        "brew", "sdkman", "npm", "uv", "codex", "rustup", "cargo", "pipx", "gh", "macos", "mas", "ohmyzsh", "selfupdate"
     )
 
     override fun call(): Int {
@@ -205,6 +205,7 @@ class MacUpdateCommand : Callable<Int> {
             launchIf(ctx, "rustup",  executor, ctx::rustupUpdate)
             launchIf(ctx, "cargo",   executor, ctx::cargoUpdate)
             launchIf(ctx, "pipx",    executor, ctx::pipxUpdate)
+            launchIf(ctx, "pip",     executor, ctx::pipUpdate)
             launchIf(ctx, "gh",      executor, ctx::ghExtUpdate)
             launchIf(ctx, "macos",   executor) {
                 if (ctx.toolPresent("softwareupdate")) ctx.macosUpdate()
@@ -220,7 +221,9 @@ class MacUpdateCommand : Callable<Int> {
                     ctx.summarySkipped += "Mac App Store (mas not installed)"
                 }
             }
-            launchIf(ctx, "ohmyzsh", executor, ctx::ohmyzshUpdate)
+            launchIf(ctx, "ohmyzsh",    executor, ctx::ohmyzshUpdate)
+            // selfupdate runs last — avoids replacing the binary while other tasks are in flight
+            launchIf(ctx, "selfupdate", executor, ctx::selfUpdate)
         }
 
     /**
@@ -283,7 +286,9 @@ fun RunContext.launchAsync(
         bufPrint("Error in $label: ${e.message}")
         summaryFailed += "$label (unexpected error)"
     } finally {
-        val elapsed = formatElapsed(System.currentTimeMillis() - taskStart)
+        val elapsedMs = System.currentTimeMillis() - taskStart
+        val elapsed = formatElapsed(elapsedMs)
+        taskDurations[label] = elapsedMs
         Config.logLine(label, "■ finished in $elapsed")
         flushTaskBuffer()
         clearTaskBuffer()
