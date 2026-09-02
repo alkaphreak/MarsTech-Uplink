@@ -51,6 +51,20 @@ data class ToolsConfig(
 }
 
 /**
+ * Homebrew-specific tuning, read from the [brew] section of config.toml.
+ */
+data class BrewConfig(
+    /** Hard cap on 'brew upgrade --greedy' — kills the process past this many minutes. */
+    val upgradeTimeoutMinutes: Int = 30,
+    /**
+     * When true, passes --force-bottle to 'brew upgrade' so formulae without a precompiled
+     * bottle (common on Tier 3 platforms like Intel macOS) fail fast instead of compiling
+     * from source, which can take hours.
+     */
+    val skipBuildFromSource: Boolean = false,
+)
+
+/**
  * User-editable application configuration.
  *
  * Loaded once (lazily) from [Config.configFile]:
@@ -71,6 +85,8 @@ data class AppConfig(
     val logRetention: Int,
     // [tools]
     val tools: ToolsConfig,
+    // [brew]
+    val brew: BrewConfig,
 ) {
     companion object {
 
@@ -86,6 +102,7 @@ data class AppConfig(
                 keewebRetention        = 5,
                 logRetention           = 5,
                 tools                  = ToolsConfig(),
+                brew                   = BrewConfig(),
             )
         }
 
@@ -131,6 +148,14 @@ data class AppConfig(
             |selfupdate    = true
             |backup_shells = true
             |backup_keeweb = true
+            |
+            |[brew]
+            |# Kill 'brew upgrade --greedy' past this many minutes (Intel Macs can otherwise
+            |# spend hours compiling formulae from source when no bottle is available).
+            |upgrade_timeout_minutes = 30
+            |# When true, fail fast (--force-bottle) on formulae without a precompiled bottle
+            |# instead of building from source.
+            |skip_build_from_source  = false
         """.trimMargin()
 
         /**
@@ -166,6 +191,10 @@ data class AppConfig(
                 "selfupdate"    to "true",
                 "backup_shells" to "true",
                 "backup_keeweb" to "true",
+            ),
+            "brew" to linkedMapOf(
+                "upgrade_timeout_minutes" to "30",
+                "skip_build_from_source"  to "false",
             ),
         )
 
@@ -263,6 +292,10 @@ data class AppConfig(
                     selfupdate    = bool("tools.selfupdate",    d.tools.selfupdate),
                     backupShells  = bool("tools.backup_shells", d.tools.backupShells),
                     backupKeeweb  = bool("tools.backup_keeweb", d.tools.backupKeeweb),
+                ),
+                brew = BrewConfig(
+                    upgradeTimeoutMinutes = int("brew.upgrade_timeout_minutes", d.brew.upgradeTimeoutMinutes),
+                    skipBuildFromSource   = bool("brew.skip_build_from_source", d.brew.skipBuildFromSource),
                 ),
             )
         }

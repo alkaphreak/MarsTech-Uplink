@@ -15,7 +15,7 @@ fun RunContext.brewUpdate() {
     // Run 'brew update' first, then 'brew outdated' sequentially to avoid lock contention
     // (both commands share the same lockfile; running them concurrently causes 'already locked')
     val updateResult = runCaptured("brew", "update")
-    bufPrint(updateResult.output)
+    bufPrint(filterAndSummarizeTapImportErrors(updateResult.output))
 
     if (updateResult.exitCode != 0) {
         handleBrewUpdateFailure(updateResult)
@@ -35,12 +35,46 @@ fun RunContext.brewUpdate() {
 private fun RunContext.brewDryRun() {
     bufPrint("[DRY-RUN] Would run: brew update")
     bufPrint("[DRY-RUN] Would show: brew outdated --verbose")
-    bufPrint("[DRY-RUN] Would run: brew upgrade --greedy")
+    val bc = Config.appConfig.brew
+    bufPrint("[DRY-RUN] Would run: brew upgrade --greedy${if (bc.skipBuildFromSource) " --force-bottle" else ""} (timeout ${bc.upgradeTimeoutMinutes}m)")
     bufPrint("[DRY-RUN] Would run: brew cleanup -s --prune=all")
     bufPrint("[DRY-RUN] Would run: brew doctor")
     bufPrint("[DRY-RUN] Would link any unlinked kegs")
     summaryUpdated += "Homebrew"
 }
+
+/**
+ * Collapses repeated "Error: Failed to import: <path>/Formula/<name>.rb" (and the matching
+ * "syntax errors found" lines) that a broken third-party tap can spam on every 'brew update'
+ * into a single one-line-per-tap summary, instead of flooding the log with dozens of lines.
+ */
+internal fun RunContext.filterAndSummarizeTapImportErrors(output: String): String {
+    val importErrorPattern = Regex("""Error: Failed to import: (.+)/Formula/([^/]+)\.rb""")
+    val syntaxErrorPattern = Regex("""^\S+: .*/Formula/[^/]+\.rb:\d+: syntax errors found$""")
+
+    val counts = linkedMapOf<String, Int>()
+    val kept = output.lines().filter { line ->
+        val importMatch = importErrorPattern.find(line)
+        if (importMatch != null) {
+            val tapDir = importMatch.groupValues[1].substringAfterLast("/Taps/")
+            counts[tapDir] = (counts[tapDir] ?: 0) + 1
+            return@filter false
+        }
+        if (syntaxErrorPattern.matches(line.trim())) return@filter false
+        true
+    }.joinToString("\n")
+
+    if (counts.isEmpty()) return kept
+
+    val summaryLines = counts.map { (tap, n) -> "brew: tap '$tap' — $n formula(e) ignored due to import errors" }
+    summaryLines.forEach { msg ->
+        if (summaryWarnings.none { it.contains(tapNameFrom(msg)) }) summaryWarnings += msg
+    }
+    return (kept.trimEnd('\n') + "\n" + summaryLines.joinToString("\n")).trim()
+}
+
+private fun tapNameFrom(summaryMsg: String): String =
+    summaryMsg.substringAfter("tap '").substringBefore("'")
 
 private fun RunContext.handleBrewUpdateFailure(result: ProcessResult) {
     val isLockContention = result.output.contains("already locked", ignoreCase = true)
@@ -58,9 +92,23 @@ private fun RunContext.handleBrewUpdateFailure(result: ProcessResult) {
 }
 
 private fun RunContext.brewUpgrade(): Int {
-    section("Homebrew upgrade (--greedy)")
-    val result = runCaptured("brew", "upgrade", "--greedy")
+    val brewConfig = Config.appConfig.brew
+    val args = buildList {
+        add("brew"); add("upgrade"); add("--greedy")
+        if (brewConfig.skipBuildFromSource) add("--force-bottle")
+    }
+    section("Homebrew upgrade (--greedy${if (brewConfig.skipBuildFromSource) ", --force-bottle" else ""})")
+    val result = runCaptured(*args.toTypedArray(), timeoutSeconds = brewConfig.upgradeTimeoutMinutes * 60L)
     bufPrint(result.output)
+
+    if (result.exitCode == 124) {
+        bufPrint("${RED}Warning: brew upgrade timed out after ${brewConfig.upgradeTimeoutMinutes}m — likely building a formula from source (no bottle for this platform)$RESET")
+        bufPrint("  Consider setting skip_build_from_source = true in the [brew] section of config.toml")
+        summaryWarnings += "brew upgrade timed out after ${brewConfig.upgradeTimeoutMinutes}m — some packages may be partially upgraded"
+        brewSurfaceDeprecationWarnings(result.output)
+        return result.exitCode
+    }
+
     if (result.exitCode != 0) {
         bufPrint("${YELLOW}Warning: Some packages failed to upgrade$RESET")
         val failedCasks = parseBrewFailedCasks(result.output)
@@ -74,8 +122,27 @@ private fun RunContext.brewUpgrade(): Int {
         bufPrint("${YELLOW}Warning: cask '$cask' cannot be upgraded as-is — manual action required$RESET")
         summaryWarnings += "brew: '$cask' cannot be upgraded as-is — run: brew reinstall --cask $cask"
     }
+    brewSurfacePostInstallFailures(result.output)
     brewSurfaceDeprecationWarnings(result.output)
     return result.exitCode
+}
+
+/**
+ * Surfaces per-formula/cask failures such as:
+ *   "Error: podman: An unsatisfied requirement failed this build."
+ *   "Error: antigravity: It seems the App source '/Applications/Antigravity.app' is not there."
+ * into summaryWarnings, so they aren't left buried in raw log output.
+ */
+internal fun RunContext.brewSurfacePostInstallFailures(output: String) {
+    val pattern = Regex("""^Error: ([\w@.-]+): (.+)$""")
+    output.lines()
+        .mapNotNull { pattern.find(it.trim())?.groupValues }
+        .filter { (_, name, _) -> name != "Problems with multiple casks" }
+        .distinct()
+        .forEach { (_, name, reason) ->
+            bufPrint("${YELLOW}Warning: '$name' failed — $reason$RESET")
+            summaryWarnings += "brew: '$name' failed — $reason"
+        }
 }
 
 /**
@@ -506,11 +573,26 @@ fun RunContext.pipUpdate() {
         return
     }
 
-    if (runProcess(pipCmd, "install", "--upgrade", "pip") != 0) {
+    if (runProcess(pipCmd, "install", "--upgrade", "pip") == 0) {
+        summaryUpdated += "pip"
+        return
+    }
+
+    // pipCmd resolved via 'which' but failed to exec — typically a broken/dangling shim
+    // (pyenv, pipx-managed venv, ...) or a PATH mismatch between 'which' and the actual
+    // process environment. Fall back to invoking pip as a module through python3, which
+    // resolves the interpreter directly instead of relying on a separate 'pip' binary on PATH.
+    if (toolPresent("python3")) {
+        bufPrint("$pipCmd failed to run directly — retrying via 'python3 -m pip'")
+        if (runProcess("python3", "-m", "pip", "install", "--upgrade", "pip") != 0) {
+            bufPrint("Warning: pip upgrade failed (both '$pipCmd' and 'python3 -m pip' failed)")
+            summaryWarnings += "pip upgrade failed (both '$pipCmd' and 'python3 -m pip' failed)"
+        } else {
+            summaryUpdated += "pip"
+        }
+    } else {
         bufPrint("Warning: pip upgrade failed")
         summaryWarnings += "pip upgrade failed"
-    } else {
-        summaryUpdated += "pip"
     }
 }
 
