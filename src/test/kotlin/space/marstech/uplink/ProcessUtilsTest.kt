@@ -2,6 +2,7 @@ package space.marstech.uplink
 
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import java.io.File
 
 class ProcessUtilsTest {
 
@@ -96,5 +97,28 @@ class ProcessUtilsTest {
         ctx.toolsPresent = mapOf("npm" to false)
         ctx.npmUpdateAfterBrewIfMissing(null)
         assertTrue(ctx.summaryWarnings.any { it.startsWith("NPM skipped") })
+    }
+
+    @Test
+    fun `timeout sends SIGTERM before SIGKILL so the process can clean up`() {
+        val marker = File.createTempFile("uplink-sigterm", ".txt").apply { delete() }
+        val ctx = RunContext(dryRun = true)
+        val result = ctx.runCaptured("sh", "-c", "trap 'touch ${marker.absolutePath}; exit 143' TERM; sleep 30 & wait", timeoutSeconds = 1)
+        assertEquals(124, result.exitCode)
+        assertTrue(marker.delete(), "the TERM trap must have run")
+    }
+
+    @Test
+    fun `captureOutput returns null when the timeout fires`() {
+        val ctx = RunContext(dryRun = true)
+        assertNull(ctx.captureOutput("sh", "-c", "echo started; sleep 30", timeoutSeconds = 1))
+    }
+
+    @Test
+    fun `a command that cannot start is reported with the Failed to run warning`() {
+        val ctx = RunContext(dryRun = true)
+        val result = ctx.runCaptured("zzz-nonexistent-cmd-xxx")
+        assertEquals(1, result.exitCode)
+        assertTrue(result.output.startsWith("Warning: Failed to run 'zzz-nonexistent-cmd-xxx'"))
     }
 }
