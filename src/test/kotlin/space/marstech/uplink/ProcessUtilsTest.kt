@@ -79,4 +79,22 @@ class ProcessUtilsTest {
         assertTrue(ctx.toolPresent("brew"))
         assertFalse(ctx.toolPresent("nonexistent-tool"))
     }
+
+    @Test
+    fun `runCaptured enforces timeout while the process is still writing`() {
+        val ctx = RunContext(dryRun = true)
+        val start = System.currentTimeMillis()
+        val result = ctx.runCaptured("sh", "-c", "echo started; sleep 30", timeoutSeconds = 1, stream = true)
+        assertEquals(124, result.exitCode)
+        assertTrue(result.output.contains("started"))
+        assertTrue(System.currentTimeMillis() - start < 10_000, "timeout must not wait for the process to exit")
+    }
+
+    @Test
+    fun `npm missing without brew is a summary warning, not a silent skip`() {
+        val ctx = RunContext(dryRun = true)
+        ctx.toolsPresent = mapOf("npm" to false)
+        ctx.npmUpdateAfterBrewIfMissing(null)
+        assertTrue(ctx.summaryWarnings.any { it.startsWith("NPM skipped") })
+    }
 }

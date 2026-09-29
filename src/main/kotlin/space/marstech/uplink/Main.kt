@@ -192,16 +192,10 @@ class MacUpdateCommand : Callable<Int> {
 
     private fun buildUpdateFutures(ctx: RunContext, executor: Executor): List<CompletableFuture<Void>> =
         buildList {
-            addBrewAndCodex(ctx, executor)
+            val brewFuture = addBrewAndCodex(ctx, executor)
             launchIf(ctx, "sdkman",  executor, ctx::sdkmanUpdate)
             launchIf(ctx, "uv",      executor, ctx::uvUpdate)
-            launchIf(ctx, "npm",     executor) {
-                if (ctx.toolPresent("npm")) ctx.npmUpdate()
-                else {
-                    ctx.bufPrint("npm not found, skipping")
-                    ctx.summarySkipped += "NPM (not installed)"
-                }
-            }
+            launchIf(ctx, "npm",     executor) { ctx.npmUpdateAfterBrewIfMissing(brewFuture) }
             launchIf(ctx, "rustup",  executor, ctx::rustupUpdate)
             launchIf(ctx, "cargo",   executor, ctx::cargoUpdate)
             launchIf(ctx, "pipx",    executor, ctx::pipxUpdate)
@@ -227,12 +221,13 @@ class MacUpdateCommand : Callable<Int> {
         }
 
     /**
-     * Adds the brew+codex future when either tool is requested.
+     * Adds the brew+codex future when either tool is requested, and returns it (null otherwise)
+     * so tasks depending on brew's side effects can wait for it.
      * Codex is intentionally coupled to brew — it must run after brewUpdate().
      */
-    private fun MutableList<CompletableFuture<Void>>.addBrewAndCodex(ctx: RunContext, executor: Executor) {
-        if (!ctx.shouldRun("brew") && !ctx.shouldRun("codex")) return
-        add(ctx.launchAsync("brew", executor) {
+    private fun MutableList<CompletableFuture<Void>>.addBrewAndCodex(ctx: RunContext, executor: Executor): CompletableFuture<Void>? {
+        if (!ctx.shouldRun("brew") && !ctx.shouldRun("codex")) return null
+        return ctx.launchAsync("brew", executor) {
             if (ctx.toolPresent("brew")) {
                 if (ctx.shouldRun("brew"))  ctx.brewUpdate()
                 if (ctx.shouldRun("codex")) ctx.codexUpdate()
@@ -246,7 +241,7 @@ class MacUpdateCommand : Callable<Int> {
                     ctx.summarySkipped += "Codex CLI (brew not installed)"
                 }
             }
-        })
+        }.also { add(it) }
     }
 
     /** Conditionally launches [block] as an async task when [tool] should run.

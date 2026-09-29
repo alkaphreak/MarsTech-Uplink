@@ -5,6 +5,7 @@ import space.marstech.uplink.Colors.RED
 import space.marstech.uplink.Colors.RESET
 import space.marstech.uplink.Colors.YELLOW
 import java.io.File
+import java.util.concurrent.Future
 
 fun RunContext.brewUpdate() {
     section("Homebrew update")
@@ -98,8 +99,9 @@ private fun RunContext.brewUpgrade(): Int {
         if (brewConfig.skipBuildFromSource) add("--force-bottle")
     }
     section("Homebrew upgrade (--greedy${if (brewConfig.skipBuildFromSource) ", --force-bottle" else ""})")
-    val result = runCaptured(*args.toTypedArray(), timeoutSeconds = brewConfig.upgradeTimeoutMinutes * 60L)
-    bufPrint(result.output)
+    // Streamed: a long from-source build must show progress in the log, not one burst at the end.
+    val result = runCaptured(*args.toTypedArray(), timeoutSeconds = brewConfig.upgradeTimeoutMinutes * 60L, stream = true)
+    bufPrint(result.output, log = false)
 
     if (result.exitCode == 124) {
         bufPrint("${RED}Warning: brew upgrade timed out after ${brewConfig.upgradeTimeoutMinutes}m — likely building a formula from source (no bottle for this platform)$RESET")
@@ -385,6 +387,24 @@ fun RunContext.sdkmanUpdate() {
     runShell("$init && sdk flush archives && sdk flush temp", sdkmanShell)
 
     summaryUpdated += "SDKMAN"
+}
+
+/**
+ * Runs [npmUpdate], or re-probes after brew when npm is missing at tool-detection time:
+ * brew relinks unlinked kegs (node included) at the end of its task, so the early probe can
+ * miss an installed npm (MARSTECH-747). A still-missing npm is a summary warning, not a silent skip.
+ */
+internal fun RunContext.npmUpdateAfterBrewIfMissing(brewDone: Future<*>?) {
+    if (!toolPresent("npm") && brewDone != null) {
+        bufPrint("npm not found yet — waiting for Homebrew (it may relink the node keg), then re-checking")
+        brewDone.get()
+        if (commandExists("npm") && commandExists("node"))
+            toolsPresent = toolsPresent + mapOf("npm" to true, "node" to true)
+    }
+    if (toolPresent("npm")) return npmUpdate()
+    bufPrint("${YELLOW}Warning: npm not found in PATH, skipping$RESET")
+    summarySkipped += "NPM (not installed)"
+    summaryWarnings += "NPM skipped: npm not found in PATH although enabled in config (node keg unlinked?)"
 }
 
 fun RunContext.npmUpdate() {
