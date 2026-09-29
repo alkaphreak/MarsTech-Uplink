@@ -193,9 +193,12 @@ class MacUpdateCommand : Callable<Int> {
     private fun buildUpdateFutures(ctx: RunContext, executor: Executor): List<CompletableFuture<Void>> =
         buildList {
             val brewFuture = addBrewAndCodex(ctx, executor)
+            // npm missing at probe time: brew may relink the node keg (MARSTECH-747). The npm task then starts
+            // only once brew is done, so it parks no thread and its Timings entry measures npm, not the wait.
+            val npmExecutor = if (brewFuture != null && !ctx.toolPresent("npm")) executor.after(brewFuture) else executor
             launchIf(ctx, "sdkman",  executor, ctx::sdkmanUpdate)
             launchIf(ctx, "uv",      executor, ctx::uvUpdate)
-            launchIf(ctx, "npm",     executor) { ctx.npmUpdateAfterBrewIfMissing(brewFuture) }
+            launchIf(ctx, "npm",     npmExecutor) { ctx.npmUpdateAfterBrewIfMissing(brewFuture) }
             launchIf(ctx, "rustup",  executor, ctx::rustupUpdate)
             launchIf(ctx, "cargo",   executor, ctx::cargoUpdate)
             launchIf(ctx, "pipx",    executor, ctx::pipxUpdate)
@@ -289,6 +292,10 @@ fun RunContext.launchAsync(
         clearTaskBuffer()
     }
 }, executor)
+
+/** Runs each task on this executor, but only once [dependency] has completed (successfully or not). */
+internal fun Executor.after(dependency: CompletableFuture<Void>): Executor =
+    Executor { task -> dependency.whenCompleteAsync({ _, _ -> task.run() }, this@after) }
 
 fun main(args: Array<String>): Unit = CommandLine(MacUpdateCommand()).execute(*args).run {
     exitProcess(this)

@@ -3,6 +3,8 @@ package space.marstech.uplink
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import java.io.File
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Executors
 
 class ProcessUtilsTest {
 
@@ -87,7 +89,7 @@ class ProcessUtilsTest {
         val start = System.currentTimeMillis()
         val result = ctx.runCaptured("sh", "-c", "echo started; sleep 30", timeoutSeconds = 1, stream = true)
         assertEquals(124, result.exitCode)
-        assertTrue(result.output.contains("started"))
+        assertEquals("started\nWarning: 'sh' timed out after 1s — process killed\n", result.output)
         assertTrue(System.currentTimeMillis() - start < 10_000, "timeout must not wait for the process to exit")
     }
 
@@ -120,5 +122,20 @@ class ProcessUtilsTest {
         val result = ctx.runCaptured("zzz-nonexistent-cmd-xxx")
         assertEquals(1, result.exitCode)
         assertTrue(result.output.startsWith("Warning: Failed to run 'zzz-nonexistent-cmd-xxx'"))
+        assertTrue(result.output.endsWith("\n"), "the next buffered line must not stick to the warning")
+    }
+
+    @Test
+    fun `a task deferred until another is done does not count the wait in its Timings entry`() {
+        val ctx = RunContext(dryRun = true)
+        val pool = Executors.newCachedThreadPool()
+        try {
+            val first = CompletableFuture.runAsync({ Thread.sleep(1_000) }, pool)
+            ctx.launchAsync("second", pool.after(first)) {}.join()
+            assertTrue(first.isDone)
+            assertTrue(ctx.taskDurations.getValue("second") < 500, "Timings must not include the wait")
+        } finally {
+            pool.shutdown()
+        }
     }
 }

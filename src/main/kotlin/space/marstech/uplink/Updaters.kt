@@ -396,8 +396,8 @@ fun RunContext.sdkmanUpdate() {
  */
 internal fun RunContext.npmUpdateAfterBrewIfMissing(brewDone: Future<*>?) {
     if (!toolPresent("npm") && brewDone != null) {
-        bufPrint("npm not found yet — waiting for Homebrew (it may relink the node keg), then re-checking")
-        brewDone.get()
+        brewDone.get()  // already done when Main.kt deferred this task with Executor.after(brew)
+        bufPrint("npm was not found at startup — re-checking now that Homebrew is done (it may have relinked the node keg)")
         if (commandExists("npm") && commandExists("node"))
             toolsPresent = toolsPresent + mapOf("npm" to true, "node" to true)
     }

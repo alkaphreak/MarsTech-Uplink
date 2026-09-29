@@ -53,7 +53,7 @@ fun RunContext.captureOutput(vararg cmd: String, timeoutSeconds: Long? = null): 
         ?.takeIf { it.exitCode != 124 }
         ?.output?.trim()?.takeIf { it.isNotEmpty() }
 
-/** Result of a captured process execution. */
+/** Result of a captured process execution. Every line of [output] ends with '\n', synthetic warnings included. */
 data class ProcessResult(val exitCode: Int, val output: String)
 
 /** Runs a command, captures output and returns exit code.
@@ -73,7 +73,7 @@ fun RunContext.runCaptured(
         // Same wording as runProcess: marstech-uplink-review greps the log for "Warning: Failed to run"
         val msg = "Warning: Failed to run '${cmd.first()}': ${e.message}"
         if (stream) logImmediate(msg)
-        ProcessResult(1, msg)
+        ProcessResult(1, "$msg\n")
     }
 
 /** Shared core of [runCaptured] and [captureOutput]; throws when the process cannot be started. */
@@ -102,7 +102,7 @@ private fun RunContext.runCapturedOrThrow(
         reader.join(5_000)
         val msg = "Warning: '${cmd.first()}' timed out after ${timeoutSeconds}s — process killed"
         if (stream) Config.logLine(label, msg)
-        return ProcessResult(124, "$out\n$msg")
+        return ProcessResult(124, "$out$msg\n")
     }
     val exit = proc.waitFor()
     reader.join()
