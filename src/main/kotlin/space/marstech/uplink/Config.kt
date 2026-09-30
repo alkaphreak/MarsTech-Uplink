@@ -81,7 +81,8 @@ object Config {
      * Initialised after [logFile] so the header is written first.
      */
     val logWriter: PrintWriter by lazy {
-        PrintWriter(logFile.bufferedWriter().let { java.io.BufferedWriter(java.io.FileWriter(logFile, true)) }, true)
+        // Append only: logFile.bufferedWriter() would truncate the file, wiping the day's earlier runs (MARSTECH-765)
+        PrintWriter(java.io.BufferedWriter(java.io.FileWriter(logFile, true)), true)
     }
 
     /**
