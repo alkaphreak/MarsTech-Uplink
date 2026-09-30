@@ -2,6 +2,9 @@ package space.marstech.uplink
 
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import java.io.File
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Executors
 
 class ProcessUtilsTest {
 
@@ -78,5 +81,61 @@ class ProcessUtilsTest {
         ctx.toolsPresent = mapOf("brew" to true, "nonexistent-tool" to false)
         assertTrue(ctx.toolPresent("brew"))
         assertFalse(ctx.toolPresent("nonexistent-tool"))
+    }
+
+    @Test
+    fun `runCaptured enforces timeout while the process is still writing`() {
+        val ctx = RunContext(dryRun = true)
+        val start = System.currentTimeMillis()
+        val result = ctx.runCaptured("sh", "-c", "echo started; sleep 30", timeoutSeconds = 1, stream = true)
+        assertEquals(124, result.exitCode)
+        assertEquals("started\nWarning: 'sh' timed out after 1s — process killed\n", result.output)
+        assertTrue(System.currentTimeMillis() - start < 10_000, "timeout must not wait for the process to exit")
+    }
+
+    @Test
+    fun `npm missing without brew is a summary warning, not a silent skip`() {
+        val ctx = RunContext(dryRun = true)
+        ctx.toolsPresent = mapOf("npm" to false)
+        ctx.npmUpdateAfterBrewIfMissing(null)
+        assertTrue(ctx.summaryWarnings.any { it.startsWith("NPM skipped") })
+    }
+
+    @Test
+    fun `timeout sends SIGTERM before SIGKILL so the process can clean up`() {
+        val marker = File.createTempFile("uplink-sigterm", ".txt").apply { delete() }
+        val ctx = RunContext(dryRun = true)
+        val result = ctx.runCaptured("sh", "-c", "trap 'touch ${marker.absolutePath}; exit 143' TERM; sleep 30 & wait", timeoutSeconds = 1)
+        assertEquals(124, result.exitCode)
+        assertTrue(marker.delete(), "the TERM trap must have run")
+    }
+
+    @Test
+    fun `captureOutput returns null when the timeout fires`() {
+        val ctx = RunContext(dryRun = true)
+        assertNull(ctx.captureOutput("sh", "-c", "echo started; sleep 30", timeoutSeconds = 1))
+    }
+
+    @Test
+    fun `a command that cannot start is reported with the Failed to run warning`() {
+        val ctx = RunContext(dryRun = true)
+        val result = ctx.runCaptured("zzz-nonexistent-cmd-xxx")
+        assertEquals(1, result.exitCode)
+        assertTrue(result.output.startsWith("Warning: Failed to run 'zzz-nonexistent-cmd-xxx'"))
+        assertTrue(result.output.endsWith("\n"), "the next buffered line must not stick to the warning")
+    }
+
+    @Test
+    fun `a task deferred until another is done does not count the wait in its Timings entry`() {
+        val ctx = RunContext(dryRun = true)
+        val pool = Executors.newCachedThreadPool()
+        try {
+            val first = CompletableFuture.runAsync({ Thread.sleep(1_000) }, pool)
+            ctx.launchAsync("second", pool.after(first)) {}.join()
+            assertTrue(first.isDone)
+            assertTrue(ctx.taskDurations.getValue("second") < 500, "Timings must not include the wait")
+        } finally {
+            pool.shutdown()
+        }
     }
 }

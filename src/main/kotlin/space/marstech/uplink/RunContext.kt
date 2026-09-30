@@ -33,7 +33,7 @@ class RunContext(
      * All updater functions check toolPresent() which reads from this map first,
      * falling back to a live `which` call if the key is absent.
      */
-    var toolsPresent: Map<String, Boolean> = emptyMap()
+    @Volatile var toolsPresent: Map<String, Boolean> = emptyMap()
 
     /**
      * Per-task output buffer — prevents interleaving on the terminal.
@@ -81,9 +81,10 @@ class RunContext(
      * Prints a message to the task buffer (async context) or directly to stdout
      * (main thread). In both cases the message is also written to the log file
      * immediately so entries appear in real-time regardless of buffer state.
+     * Pass `log = false` for output that was already streamed to the log (`runCaptured(stream = true)`).
      */
-    fun bufPrint(msg: String = "") {
-        logImmediate(msg)
+    fun bufPrint(msg: String = "", log: Boolean = true) {
+        if (log) logImmediate(msg)
         val buf = taskBuffer.get()
         when {
             buf != null -> buf.appendLine(msg)

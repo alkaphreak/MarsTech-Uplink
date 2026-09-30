@@ -3,6 +3,7 @@ package space.marstech.uplink
 import java.io.File
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 
 /** Checks whether a command is available in PATH. */
 fun commandExists(cmd: String): Boolean =
@@ -17,38 +18,23 @@ fun commandExists(cmd: String): Boolean =
  */
 fun RunContext.runProcess(vararg cmd: String, workDir: File? = null, timeoutSeconds: Long? = null): Int = runCatching {
     val buf = taskBuffer.get()
-    val pb = ProcessBuilder(*cmd).apply { workDir?.let { directory(it) } }
     if (buf != null) {
-        pb.redirectErrorStream(true)
-        val proc = pb.start()
-        proc.inputStream.bufferedReader().forEachLine { line ->
-            buf.appendLine(line)
-            logImmediate(line)   // real-time log — does not wait for task completion
+        // Streams each line to the log as it arrives; the buffer is flushed at task end anyway.
+        val result = runCaptured(*cmd, workDir = workDir, timeoutSeconds = timeoutSeconds, stream = true)
+        buf.append(result.output)
+        return@runCatching result.exitCode
+    }
+    val proc = ProcessBuilder(*cmd).apply { workDir?.let { directory(it) } }.inheritIO().start()
+    if (timeoutSeconds != null) {
+        val finished = proc.waitFor(timeoutSeconds, TimeUnit.SECONDS)
+        if (!finished) {
+            proc.killTree()
+            System.err.println("Warning: '${cmd.first()}' timed out after ${timeoutSeconds}s — process killed")
+            return@runCatching 124
         }
-        if (timeoutSeconds != null) {
-            val finished = proc.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-            if (!finished) {
-                proc.destroyForcibly()
-                buf.appendLine("Warning: '${cmd.first()}' timed out after ${timeoutSeconds}s — process killed")
-                return@runCatching 124
-            }
-            proc.exitValue()
-        } else {
-            proc.waitFor()
-        }
+        proc.exitValue()
     } else {
-        val proc = pb.inheritIO().start()
-        if (timeoutSeconds != null) {
-            val finished = proc.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-            if (!finished) {
-                proc.destroyForcibly()
-                System.err.println("Warning: '${cmd.first()}' timed out after ${timeoutSeconds}s — process killed")
-                return@runCatching 124
-            }
-            proc.exitValue()
-        } else {
-            proc.waitFor()
-        }
+        proc.waitFor()
     }
 }.getOrElse { e ->
     bufPrint("Warning: Failed to run '${cmd.first()}': ${e.message}")
@@ -59,50 +45,80 @@ fun RunContext.runProcess(vararg cmd: String, workDir: File? = null, timeoutSeco
 fun RunContext.runShell(command: String, shell: String = "zsh", timeoutSeconds: Long? = null): Int =
     runProcess(shell, "-c", command, timeoutSeconds = timeoutSeconds)
 
-/** Runs a command, captures combined stdout+stderr. Returns null on failure or empty output.
- * @param timeoutSeconds if set, kills the process after the given number of seconds.
+/** Runs a command, captures combined stdout+stderr. Returns null on failure, timeout or empty output.
+ * @param timeoutSeconds if set, kills the process tree after the given number of seconds.
  */
-fun RunContext.captureOutput(vararg cmd: String, timeoutSeconds: Long? = null): String? = runCatching {
-    val proc = ProcessBuilder(*cmd).redirectErrorStream(true).start()
-    val out = proc.inputStream.bufferedReader().readText().trim()
-    if (timeoutSeconds != null) {
-        val finished = proc.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-        if (!finished) {
-            proc.destroyForcibly(); return@runCatching null
-        }
-    } else {
-        proc.waitFor()
-    }
-    out.takeIf { it.isNotEmpty() }
-}.getOrNull()
+fun RunContext.captureOutput(vararg cmd: String, timeoutSeconds: Long? = null): String? =
+    runCatching { runCapturedOrThrow(cmd, null, timeoutSeconds, stream = false) }.getOrNull()
+        ?.takeIf { it.exitCode != 124 }
+        ?.output?.trim()?.takeIf { it.isNotEmpty() }
 
-/** Result of a captured process execution. */
+/** Result of a captured process execution. Every line of [output] ends with '\n', synthetic warnings included. */
 data class ProcessResult(val exitCode: Int, val output: String)
 
 /** Runs a command, captures output and returns exit code.
- * @param timeoutSeconds if set, kills the process after the given number of seconds and returns exit code 124.
+ * Output is read on a separate thread so [timeoutSeconds] is enforced even while the process
+ * keeps writing (reading to EOF first would block until the process exits on its own).
+ * @param timeoutSeconds if set, kills the process tree after the given number of seconds and returns exit code 124.
+ * @param stream if true, writes each output line to the log file as it arrives (see [RunContext.logImmediate]);
+ *   the caller must then not log [ProcessResult.output] again.
  */
-fun RunContext.runCaptured(vararg cmd: String, workDir: File? = null, timeoutSeconds: Long? = null): ProcessResult =
-    runCatching {
-        val proc = ProcessBuilder(*cmd)
-            .redirectErrorStream(true)
-            .apply { workDir?.let { directory(it) } }
-            .start()
-        val out = proc.inputStream.bufferedReader().readText()
-        if (timeoutSeconds != null) {
-            val finished = proc.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-            if (!finished) {
-                proc.destroyForcibly()
-                return@runCatching ProcessResult(
-                    124,
-                    out + "\nWarning: '${cmd.first()}' timed out after ${timeoutSeconds}s — process killed"
-                )
+fun RunContext.runCaptured(
+    vararg cmd: String,
+    workDir: File? = null,
+    timeoutSeconds: Long? = null,
+    stream: Boolean = false,
+): ProcessResult =
+    runCatching { runCapturedOrThrow(cmd, workDir, timeoutSeconds, stream) }.getOrElse { e ->
+        // Same wording as runProcess: marstech-uplink-review greps the log for "Warning: Failed to run"
+        val msg = "Warning: Failed to run '${cmd.first()}': ${e.message}"
+        if (stream) logImmediate(msg)
+        ProcessResult(1, "$msg\n")
+    }
+
+/** Shared core of [runCaptured] and [captureOutput]; throws when the process cannot be started. */
+private fun RunContext.runCapturedOrThrow(
+    cmd: Array<out String>,
+    workDir: File?,
+    timeoutSeconds: Long?,
+    stream: Boolean,
+): ProcessResult {
+    val proc = ProcessBuilder(*cmd)
+        .redirectErrorStream(true)
+        .apply { workDir?.let { directory(it) } }
+        .start()
+    val label = threadLabel.get() ?: "main"
+    val out = StringBuffer()
+    val reader = thread(isDaemon = true, name = "uplink-reader-${cmd.first()}") {
+        runCatching {
+            proc.inputStream.bufferedReader().forEachLine { line ->
+                out.append(line).append('\n')
+                if (stream) Config.logLine(label, line)
             }
-            ProcessResult(proc.exitValue(), out)
-        } else {
-            ProcessResult(proc.waitFor(), out)
         }
-    }.getOrElse { e -> ProcessResult(1, "Error running ${cmd.first()}: ${e.message}") }
+    }
+    if (timeoutSeconds != null && !proc.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+        proc.killTree()
+        reader.join(5_000)
+        val msg = "Warning: '${cmd.first()}' timed out after ${timeoutSeconds}s — process killed"
+        if (stream) Config.logLine(label, msg)
+        return ProcessResult(124, "$out$msg\n")
+    }
+    val exit = proc.waitFor()
+    reader.join()
+    return ProcessResult(exit, out.toString())
+}
+
+/**
+ * Kills the process and its children (brew runs as bash -> ruby -> build tools; killing only the root leaves orphans).
+ * SIGTERM first so brew can delete its build dir (several GB for llvm), then SIGKILL whatever is still alive after 30 s.
+ */
+private fun Process.killTree() {
+    val tree = descendants().toList() + toHandle()
+    tree.forEach { it.destroy() }
+    runCatching { CompletableFuture.allOf(*tree.map { it.onExit() }.toTypedArray()).get(30, TimeUnit.SECONDS) }
+    tree.filter { it.isAlive }.forEach { it.destroyForcibly() }
+}
 
 /**
  * Builds the tool-presence map by running all `which` checks in parallel.

@@ -192,16 +192,13 @@ class MacUpdateCommand : Callable<Int> {
 
     private fun buildUpdateFutures(ctx: RunContext, executor: Executor): List<CompletableFuture<Void>> =
         buildList {
-            addBrewAndCodex(ctx, executor)
+            val brewFuture = addBrewAndCodex(ctx, executor)
+            // npm missing at probe time: brew may relink the node keg (MARSTECH-747). The npm task then starts
+            // only once brew is done, so it parks no thread and its Timings entry measures npm, not the wait.
+            val npmExecutor = if (brewFuture != null && !ctx.toolPresent("npm")) executor.after(brewFuture) else executor
             launchIf(ctx, "sdkman",  executor, ctx::sdkmanUpdate)
             launchIf(ctx, "uv",      executor, ctx::uvUpdate)
-            launchIf(ctx, "npm",     executor) {
-                if (ctx.toolPresent("npm")) ctx.npmUpdate()
-                else {
-                    ctx.bufPrint("npm not found, skipping")
-                    ctx.summarySkipped += "NPM (not installed)"
-                }
-            }
+            launchIf(ctx, "npm",     npmExecutor) { ctx.npmUpdateAfterBrewIfMissing(brewFuture) }
             launchIf(ctx, "rustup",  executor, ctx::rustupUpdate)
             launchIf(ctx, "cargo",   executor, ctx::cargoUpdate)
             launchIf(ctx, "pipx",    executor, ctx::pipxUpdate)
@@ -227,12 +224,13 @@ class MacUpdateCommand : Callable<Int> {
         }
 
     /**
-     * Adds the brew+codex future when either tool is requested.
+     * Adds the brew+codex future when either tool is requested, and returns it (null otherwise)
+     * so tasks depending on brew's side effects can wait for it.
      * Codex is intentionally coupled to brew — it must run after brewUpdate().
      */
-    private fun MutableList<CompletableFuture<Void>>.addBrewAndCodex(ctx: RunContext, executor: Executor) {
-        if (!ctx.shouldRun("brew") && !ctx.shouldRun("codex")) return
-        add(ctx.launchAsync("brew", executor) {
+    private fun MutableList<CompletableFuture<Void>>.addBrewAndCodex(ctx: RunContext, executor: Executor): CompletableFuture<Void>? {
+        if (!ctx.shouldRun("brew") && !ctx.shouldRun("codex")) return null
+        return ctx.launchAsync("brew", executor) {
             if (ctx.toolPresent("brew")) {
                 if (ctx.shouldRun("brew"))  ctx.brewUpdate()
                 if (ctx.shouldRun("codex")) ctx.codexUpdate()
@@ -246,7 +244,7 @@ class MacUpdateCommand : Callable<Int> {
                     ctx.summarySkipped += "Codex CLI (brew not installed)"
                 }
             }
-        })
+        }.also { add(it) }
     }
 
     /** Conditionally launches [block] as an async task when [tool] should run.
@@ -294,6 +292,10 @@ fun RunContext.launchAsync(
         clearTaskBuffer()
     }
 }, executor)
+
+/** Runs each task on this executor, but only once [dependency] has completed (successfully or not). */
+internal fun Executor.after(dependency: CompletableFuture<Void>): Executor =
+    Executor { task -> dependency.whenCompleteAsync({ _, _ -> task.run() }, this@after) }
 
 fun main(args: Array<String>): Unit = CommandLine(MacUpdateCommand()).execute(*args).run {
     exitProcess(this)
