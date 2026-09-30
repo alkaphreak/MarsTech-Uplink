@@ -38,7 +38,7 @@
 - User config file: `~/Library/Application Support/marstech/marstech-uplink/config.toml` — auto-created with placeholder defaults on first run. See `AppConfig.kt` for all keys.
   - The `[tools]` section maps every tool name to a boolean; set `ohmyzsh = false` to permanently skip a tool without touching the CLI. Managed via `ToolsConfig` and read through `RunContext.shouldRun()`. Includes `backup_shells` and `backup_keeweb` flags for the backup phase.
   - If a key is missing from an existing config file, `AppConfig.repairMissingKeys()` injects it with its default value in-place on every startup — no manual migration needed when adding new config keys.
-- Logs are always appended to `~/Library/Logs/marstech/marstech-uplink/marstech-uplink-YYYY-MM-DD.log`.
+- Logs are always appended to `~/Library/Logs/marstech/marstech-uplink/marstech-uplink-YYYY-MM-DD.log`, one `--- Run started` block per run. Never open that file in a truncating mode: it wipes the day's earlier runs (MARSTECH-765).
 - External commands currently orchestrated include: `brew`, `sdk`, `npm`/`node`, `uv`, `rustup`, `cargo`/`cargo-install-update`, `pipx`, `pip`/`pip3`, `gh`, `softwareupdate`, `mas`, `omz`, `zsh`, `osascript`, `scutil`, `hostname`, `curl`, `unzip`.
 - ANSI colors are centralized in `Colors.kt` and rely on Jansi setup/teardown in `Main.kt`; do not add manual TTY detection.
 
@@ -49,11 +49,14 @@
   - `mvn package` -> produces `target/marstech-uplink.jar`
   - `mvn -Pnative package` -> GraalVM native binary build
   - `./build-install.sh` -> bootstraps SDKMAN from `.sdkmanrc`, installs/activates the required GraalVM JDK if missing, runs `mvn clean install` then `mvn -Pnative package -DskipTests`, copies the native binary to `~/.local/bin/marstech-uplink`, and runs a smoke test.
+  - First run after a fresh clone, or after an sdkman update, may stop with `Stop! kotlin X is
+    not installed` — run `sdk env install` once (installs the `.sdkmanrc`-pinned Kotlin candidate),
+    then re-run `./build-install.sh` (confirmed 2026-09-20, MARSTECH-744).
 - Verified smoke test for the packaged CLI: `java -jar target/marstech-uplink.jar --dry-run --only brew`.
 - Use `--dry-run` and `--only <tool>` for safe debugging of one updater without touching the full machine.
 
 ## Non-obvious caveats
-- Tests are smoke-level, not hermetic. `BackupsTest.backupKeewebDb()` may copy a real KeeWeb database if the configured source path exists on the current machine.
+- Surefire runs the tests with `HOME=target/test-home` (MARSTECH-765): the config, log and KeeWeb paths resolved through `Config.HOME` stay under `target/`, never the real ones. Tests are still smoke-level, not hermetic: they run real read-only commands (`which`, `sh`, `softwareupdate --list`).
 - Config paths in `AppConfig` default to generic placeholders (`~/KeeWeb/…`, `~/MyWorkspace/…`); the real paths are user-defined in `config.toml`.
 - `macosUpdate()` dry-run still calls `softwareupdate --list`; under Surefire this emits a known `Corrupted channel by directly writing to native stream` warning in `target/surefire-reports/*.dumpstream`.
 - Ignore `target/` for source edits; the real implementation lives only under `src/main/kotlin` and `src/test/kotlin`.
