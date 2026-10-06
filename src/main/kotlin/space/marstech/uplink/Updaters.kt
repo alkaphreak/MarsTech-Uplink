@@ -37,7 +37,8 @@ private fun RunContext.brewDryRun() {
     bufPrint("[DRY-RUN] Would run: brew update")
     bufPrint("[DRY-RUN] Would show: brew outdated --verbose")
     val bc = Config.appConfig.brew
-    bufPrint("[DRY-RUN] Would run: brew upgrade --greedy${if (bc.skipBuildFromSource) " --force-bottle" else ""} (timeout ${bc.upgradeTimeoutMinutes}m)")
+    bufPrint("[DRY-RUN] Would run: brew upgrade --formula${if (bc.skipBuildFromSource) " --force-bottle" else ""}, then brew upgrade --cask --greedy (timeout ${bc.upgradeTimeoutMinutes}m total)")
+    if (bc.excludeCasks.isNotEmpty()) bufPrint("[DRY-RUN] Would leave out casks: ${bc.excludeCasks.joinToString(", ")}")
     bufPrint("[DRY-RUN] Would run: brew cleanup -s --prune=all")
     bufPrint("[DRY-RUN] Would run: brew doctor")
     bufPrint("[DRY-RUN] Would link any unlinked kegs")
@@ -92,23 +93,39 @@ private fun RunContext.handleBrewUpdateFailure(result: ProcessResult) {
     }
 }
 
+/**
+ * Formulae first, then casks, sharing the one [BrewConfig.upgradeTimeoutMinutes] budget.
+ * Split so `exclude_casks` can leave out casks that would wait on an admin password.
+ */
 private fun RunContext.brewUpgrade(): Int {
     val brewConfig = Config.appConfig.brew
-    val args = buildList {
-        add("brew"); add("upgrade"); add("--greedy")
+    val budgetSeconds = brewConfig.upgradeTimeoutMinutes * 60L
+    val startedAt = System.nanoTime()
+
+    val formulaArgs = buildList {
+        add("brew"); add("upgrade"); add("--formula")
         if (brewConfig.skipBuildFromSource) add("--force-bottle")
     }
-    section("Homebrew upgrade (--greedy${if (brewConfig.skipBuildFromSource) ", --force-bottle" else ""})")
+    section("Homebrew upgrade — formulae${if (brewConfig.skipBuildFromSource) " (--force-bottle)" else ""}")
     // Streamed: a long from-source build must show progress in the log, not one burst at the end.
-    val result = runCaptured(*args.toTypedArray(), timeoutSeconds = brewConfig.upgradeTimeoutMinutes * 60L, stream = true)
-    bufPrint(result.output, log = false)
+    val formulaResult = runCaptured(*formulaArgs.toTypedArray(), timeoutSeconds = budgetSeconds, stream = true)
+    bufPrint(formulaResult.output, log = false)
+    if (formulaResult.exitCode == 124) return brewUpgradeTimedOut(formulaResult.output, casks = false)
 
-    if (result.exitCode == 124) {
-        bufPrint("${RED}Warning: brew upgrade timed out after ${brewConfig.upgradeTimeoutMinutes}m — likely building a formula from source (no bottle for this platform)$RESET")
-        bufPrint("  Consider setting skip_build_from_source = true in the [brew] section of config.toml")
-        summaryWarnings += "brew upgrade timed out after ${brewConfig.upgradeTimeoutMinutes}m — some packages may be partially upgraded"
-        brewSurfaceDeprecationWarnings(result.output)
-        return result.exitCode
+    // Empty list = every outdated cask; null = nothing to run.
+    val casks = if (brewConfig.excludeCasks.isEmpty()) emptyList() else brewCasksToUpgrade(brewConfig.excludeCasks)
+    var result = formulaResult
+    if (casks != null) {
+        val elapsed = (System.nanoTime() - startedAt) / 1_000_000_000
+        section("Homebrew upgrade — casks (--greedy)")
+        val caskResult = runCaptured(
+            "brew", "upgrade", "--cask", "--greedy", *casks.toTypedArray(),
+            timeoutSeconds = (budgetSeconds - elapsed).coerceAtLeast(60), stream = true,
+        )
+        bufPrint(caskResult.output, log = false)
+        val combined = formulaResult.output + caskResult.output
+        if (caskResult.exitCode == 124) return brewUpgradeTimedOut(combined, casks = true)
+        result = ProcessResult(if (formulaResult.exitCode != 0) formulaResult.exitCode else caskResult.exitCode, combined)
     }
 
     if (result.exitCode != 0) {
@@ -127,6 +144,57 @@ private fun RunContext.brewUpgrade(): Int {
     brewSurfacePostInstallFailures(result.output)
     brewSurfaceDeprecationWarnings(result.output)
     return result.exitCode
+}
+
+/**
+ * Outdated casks minus [excluded], or null when the cask phase must not run: nothing left,
+ * or the outdated list could not be read (running a bare 'brew upgrade --cask' would then
+ * pull in the excluded casks too). Excluded casks that are outdated go to summarySkipped.
+ */
+private fun RunContext.brewCasksToUpgrade(excluded: List<String>): List<String>? {
+    val outdated = runCaptured("brew", "outdated", "--cask", "--greedy", "--quiet", timeoutSeconds = 300)
+    if (outdated.exitCode != 0) {
+        bufPrint("${YELLOW}Warning: could not list outdated casks (exit ${outdated.exitCode}) — skipping cask upgrades$RESET")
+        summaryWarnings += "brew: outdated casks could not be listed, cask upgrades skipped"
+        return null
+    }
+    val (skipped, toUpgrade) = partitionExcludedCasks(outdated.output, excluded)
+    skipped.forEach { summarySkipped += "brew cask $it (excluded in config — upgrade it by hand: brew upgrade --cask $it)" }
+    if (skipped.isNotEmpty()) bufPrint("Excluded by config: ${skipped.joinToString(", ")}")
+    if (toUpgrade.isEmpty()) bufPrint("No cask left to upgrade after exclusions")
+    return toUpgrade.ifEmpty { null }
+}
+
+/**
+ * Splits 'brew outdated --quiet' output into (excluded, to upgrade); names may carry a tap prefix.
+ * stderr is merged in, so lines that are not a bare token (the Tier 3 platform notice) are dropped.
+ */
+internal fun partitionExcludedCasks(outdatedOutput: String, excluded: List<String>): Pair<List<String>, List<String>> {
+    val token = Regex("""[a-z0-9][\w@.+/-]*""")
+    return outdatedOutput.lines().map { it.trim() }.filter { token.matches(it) }
+        .partition { it.substringAfterLast('/') in excluded }
+}
+
+private fun RunContext.brewUpgradeTimedOut(output: String, casks: Boolean): Int {
+    val minutes = Config.appConfig.brew.upgradeTimeoutMinutes
+    val last = lastBrewStep(output)
+    val stuckOn = last?.let { " (stuck on: $it)" } ?: ""
+    if (casks) {
+        bufPrint("${RED}Warning: brew cask upgrade timed out after ${minutes}m$stuckOn — a cask install/uninstall may be waiting for an admin password$RESET")
+        bufPrint("  Consider adding it to exclude_casks in the [brew] section of config.toml")
+    } else {
+        bufPrint("${RED}Warning: brew formula upgrade timed out after ${minutes}m$stuckOn — likely building from source (no bottle for this platform)$RESET")
+        bufPrint("  Consider setting skip_build_from_source = true in the [brew] section of config.toml")
+    }
+    summaryWarnings += "brew upgrade timed out after ${minutes}m$stuckOn — some packages may be partially upgraded"
+    brewSurfaceDeprecationWarnings(output)
+    return 124
+}
+
+/** The package of the last "==> Upgrading X" / "==> Installing X" line brew printed. */
+internal fun lastBrewStep(output: String): String? {
+    val step = Regex("""^==> (?:Upgrading|Installing) ([A-Za-z][\w@.+/-]*)""")
+    return output.lines().asReversed().firstNotNullOfOrNull { step.find(it.trim())?.groupValues?.get(1) }
 }
 
 /**
