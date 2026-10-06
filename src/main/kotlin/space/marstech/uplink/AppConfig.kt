@@ -62,6 +62,11 @@ data class BrewConfig(
      * from source, which can take hours.
      */
     val skipBuildFromSource: Boolean = false,
+    /**
+     * Casks never upgraded by the unattended run: those whose install/uninstall asks for an
+     * admin password (pkg installers, system launchd services, kexts) hang until the timeout.
+     */
+    val excludeCasks: List<String> = emptyList(),
 )
 
 /**
@@ -156,6 +161,9 @@ data class AppConfig(
             |# When true, fail fast (--force-bottle) on formulae without a precompiled bottle
             |# instead of building from source.
             |skip_build_from_source  = false
+            |# Casks to leave out of 'brew upgrade' (e.g. ones that prompt for an admin
+            |# password and would hang the unattended run). One line: ["a", "b"]
+            |exclude_casks           = []
         """.trimMargin()
 
         /**
@@ -195,6 +203,7 @@ data class AppConfig(
             "brew" to linkedMapOf(
                 "upgrade_timeout_minutes" to "30",
                 "skip_build_from_source"  to "false",
+                "exclude_casks"           to "[]",
             ),
         )
 
@@ -221,7 +230,8 @@ data class AppConfig(
 
         // -----------------------------------------------------------------
         // Minimal TOML parser — supports [sections], key = "string",
-        // key = integer, key = boolean, and # comments.
+        // key = integer, key = boolean, single-line ["string", ...] arrays,
+        // and # comments.
         // No external dependencies required.
         // -----------------------------------------------------------------
 
@@ -258,6 +268,15 @@ data class AppConfig(
 
             fun int(key: String, default: Int) =
                 values[key]?.toIntOrNull() ?: default
+
+            /** Single-line string array: ["a", "b"]. */
+            fun list(key: String, default: List<String>) =
+                values[key]?.takeIf { it.startsWith("[") && it.endsWith("]") }
+                    ?.removeSurrounding("[", "]")
+                    ?.split(",")
+                    ?.map { it.trim().removeSurrounding("\"") }
+                    ?.filter { it.isNotBlank() }
+                    ?: default
 
             fun bool(key: String, default: Boolean) =
                 when (values[key]?.lowercase()) {
@@ -296,6 +315,7 @@ data class AppConfig(
                 brew = BrewConfig(
                     upgradeTimeoutMinutes = int("brew.upgrade_timeout_minutes", d.brew.upgradeTimeoutMinutes),
                     skipBuildFromSource   = bool("brew.skip_build_from_source", d.brew.skipBuildFromSource),
+                    excludeCasks          = list("brew.exclude_casks", d.brew.excludeCasks),
                 ),
             )
         }

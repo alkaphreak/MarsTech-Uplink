@@ -310,4 +310,37 @@ class UpdatersTest {
         assertTrue(compareVersions("1.1", "1.0.0") > 0)
         assertEquals(0, compareVersions("1.0", "1.0.0"))
     }
+
+    // -------------------------------------------------------------------------
+    // brew cask exclusions (MARSTECH-782)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `partitionExcludedCasks splits excluded casks and drops brew notices`() {
+        val output = """
+            Warning: You are using macOS on Intel x86_64.
+            We do not provide support for this platform (as-of September 2026, announced August 2025).
+              https://docs.brew.sh/Support-Tiers#tier-3
+            docker-desktop
+            zed
+            homebrew/cask/tailscale-app
+        """.trimIndent()
+        val (skipped, toUpgrade) = partitionExcludedCasks(output, listOf("docker-desktop", "tailscale-app"))
+        assertEquals(listOf("docker-desktop", "homebrew/cask/tailscale-app"), skipped)
+        assertEquals(listOf("zed"), toUpgrade)
+    }
+
+    @Test
+    fun `lastBrewStep returns the package brew was on when killed`() {
+        val output = """
+            ==> Upgrading 3 outdated packages:
+            ==> Upgrading xorgproto
+            ==> Installing xorgproto dependency: util-macros
+            ==> Upgrading docker-desktop
+              4.93.0,240920 -> 4.94.0,241994
+            ==> Removing launchctl service com.docker.helper
+        """.trimIndent()
+        assertEquals("docker-desktop", lastBrewStep(output))
+        assertNull(lastBrewStep("==> Upgrading 3 outdated packages:"))
+    }
 }

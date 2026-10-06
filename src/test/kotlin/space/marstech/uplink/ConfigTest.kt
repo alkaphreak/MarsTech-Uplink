@@ -14,6 +14,23 @@ class ConfigTest {
     }
 
     @Test
+    fun `exclude_casks is read as a single-line string array`() {
+        val file = java.io.File.createTempFile("uplink-config", ".toml").apply { deleteOnExit() }
+        file.writeText("[brew]\nexclude_casks = [\"docker-desktop\", \"protonvpn\"] # sudo prompts\n")
+        val (config, _) = AppConfig.loadWithMeta(file)
+        assertEquals(listOf("docker-desktop", "protonvpn"), config.brew.excludeCasks)
+    }
+
+    @Test
+    fun `exclude_casks defaults to empty and is injected into an older config`() {
+        val file = java.io.File.createTempFile("uplink-config", ".toml").apply { deleteOnExit() }
+        file.writeText("[brew]\nupgrade_timeout_minutes = 240\n")
+        val (config, _) = AppConfig.loadWithMeta(file)
+        assertEquals(emptyList<String>(), config.brew.excludeCasks)
+        assertTrue(file.readText().contains("exclude_casks = []"))
+    }
+
+    @Test
     fun `tests log under target, never to the real log`() {
         assertTrue(Config.logFile.path.contains("/target/test-home/"), "surefire must point HOME at target/test-home")
     }

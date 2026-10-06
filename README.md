@@ -170,7 +170,19 @@ ohmyzsh       = true
 selfupdate    = true
 backup_shells = true
 backup_keeweb = true
+
+[brew]
+# Kill the brew upgrade (formulae, then casks) past this many minutes in total
+upgrade_timeout_minutes = 30
+# Fail fast on formulae without a bottle instead of building from source
+skip_build_from_source  = false
+# Casks left out of the unattended upgrade, e.g. ones that prompt for an admin
+# password (pkg installers, system launchd services). One line: ["a", "b"]
+exclude_casks           = []
 ```
+
+Excluded casks that are outdated are listed under `Skipped:` in the summary; upgrade them by
+hand with `brew upgrade --cask <name>`.
 
 Changes take effect immediately on the next run — no restart needed.
 
