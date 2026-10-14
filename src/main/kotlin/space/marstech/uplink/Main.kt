@@ -138,6 +138,7 @@ class MacUpdateCommand : Callable<Int> {
         println("$BOLD  Finished in $elapsed$RESET")
         println("$BOLD===============================================$RESET")
         println()
+        Config.appendLog("\n=== BACKUP-ONLY${if (ctx.dryRun) " (DRY-RUN)" else ""} COMPLETED in $elapsed ===\n")
         return 0
     }
 

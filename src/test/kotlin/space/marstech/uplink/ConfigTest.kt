@@ -22,6 +22,14 @@ class ConfigTest {
     }
 
     @Test
+    fun `a quoted value followed by an inline comment loses both`() {
+        val file = java.io.File.createTempFile("uplink-config", ".toml").apply { deleteOnExit() }
+        file.writeText("[paths]\nlog_dir = \"/tmp/uplink-logs\" # moved\n")
+        val (config, _) = AppConfig.loadWithMeta(file)
+        assertEquals("/tmp/uplink-logs", config.logDir)
+    }
+
+    @Test
     fun `exclude_casks defaults to empty and is injected into an older config`() {
         val file = java.io.File.createTempFile("uplink-config", ".toml").apply { deleteOnExit() }
         file.writeText("[brew]\nupgrade_timeout_minutes = 240\n")

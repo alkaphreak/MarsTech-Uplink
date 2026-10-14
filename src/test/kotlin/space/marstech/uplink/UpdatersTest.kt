@@ -342,5 +342,18 @@ class UpdatersTest {
         """.trimIndent()
         assertEquals("docker-desktop", lastBrewStep(output))
         assertNull(lastBrewStep("==> Upgrading 3 outdated packages:"))
+        assertEquals("1password", lastBrewStep("==> Upgrading 1password"))
+    }
+
+    @Test
+    fun `parseBrewPinBlocked names the pins and the formulae they block`() {
+        val output = """
+            Error: You must `brew unpin libssh2` as installing curl requires the latest version of pinned dependencies.
+            Error: You must `brew unpin libssh2 libgit2 llvm rust` as installing vim requires the latest version of pinned dependencies.
+            Error: You must `brew unpin pandoc` as installing yq requires the latest version of pinned dependencies.
+            Error: You must `brew unpin libssh2` as installing curl requires the latest version of pinned dependencies.
+        """.trimIndent()
+        assertEquals(listOf("libssh2", "libgit2", "llvm", "rust", "pandoc") to listOf("curl", "vim", "yq"), parseBrewPinBlocked(output))
+        assertNull(parseBrewPinBlocked("==> Upgrading docker-desktop"))
     }
 }

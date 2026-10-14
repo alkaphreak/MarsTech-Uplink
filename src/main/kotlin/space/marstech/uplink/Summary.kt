@@ -109,8 +109,9 @@ private fun RunContext.buildNotificationMessage(elapsed: String, hasFailed: Bool
 
 private fun RunContext.appendSummaryLog(elapsed: String) {
     Config.appendLog(buildString {
-        appendLine(); appendLine("=== SUMMARY ===")
-        if (summaryUpdated.isNotEmpty()) appendLine("Updated:  ${summaryUpdated.joinToString(", ")}")
+        appendLine(); appendLine(if (dryRun) "=== SUMMARY (DRY-RUN) ===" else "=== SUMMARY ===")
+        if (summaryUpdated.isNotEmpty())
+            appendLine("${if (dryRun) "Would update:" else "Updated:"}  ${summaryUpdated.joinToString(", ")}")
         if (summarySkipped.isNotEmpty()) appendLine("Skipped:  ${summarySkipped.joinToString(", ")}")
         if (summaryFailed.isNotEmpty()) appendLine("Failed:   ${summaryFailed.joinToString(", ")}")
         if (summaryWarnings.isNotEmpty()) appendLine("Warnings: ${summaryWarnings.joinToString("; ")}")
