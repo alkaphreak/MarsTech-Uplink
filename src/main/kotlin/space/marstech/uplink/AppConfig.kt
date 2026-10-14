@@ -249,10 +249,10 @@ data class AppConfig(
                     line.contains("=") -> {
                         val eqIdx = line.indexOf('=')
                         val key   = line.substring(0, eqIdx).trim()
-                        val value = line.substring(eqIdx + 1).trim()
-                            .removePrefix("\"").removeSuffix("\"")
-                            .substringBefore(" #")   // strip inline comments
+                        val value = line.substring(eqIdx + 1)
+                            .substringBefore(" #")   // strip inline comments before the quotes
                             .trim()
+                            .removePrefix("\"").removeSuffix("\"")
                         values["$section.$key"] = value
                     }
                 }

@@ -116,11 +116,12 @@ private fun RunContext.brewUpgrade(): Int {
     val casks = if (brewConfig.excludeCasks.isEmpty()) emptyList() else brewCasksToUpgrade(brewConfig.excludeCasks)
     var result = formulaResult
     if (casks != null) {
-        val elapsed = (System.nanoTime() - startedAt) / 1_000_000_000
+        val remaining = budgetSeconds - (System.nanoTime() - startedAt) / 1_000_000_000
+        if (remaining <= 0) return brewUpgradeTimedOut(formulaResult.output, casks = false)  // formulae spent the budget
         section("Homebrew upgrade — casks (--greedy)")
         val caskResult = runCaptured(
             "brew", "upgrade", "--cask", "--greedy", *casks.toTypedArray(),
-            timeoutSeconds = (budgetSeconds - elapsed).coerceAtLeast(60), stream = true,
+            timeoutSeconds = remaining, stream = true,
         )
         bufPrint(caskResult.output, log = false)
         val combined = formulaResult.output + caskResult.output
@@ -131,9 +132,13 @@ private fun RunContext.brewUpgrade(): Int {
     if (result.exitCode != 0) {
         bufPrint("${YELLOW}Warning: Some packages failed to upgrade$RESET")
         val failedCasks = parseBrewFailedCasks(result.output)
+        val pinBlocked = parseBrewPinBlocked(result.output)
         if (failedCasks.isNotEmpty())
             summaryWarnings += "Brew casks failed to upgrade: ${failedCasks.joinToString(", ")}"
-        else
+        if (pinBlocked != null)
+            summaryWarnings += "brew: blocked by pins: ${pinBlocked.first.joinToString(", ")} -> " +
+                "${pinBlocked.second.size} formulae (${pinBlocked.second.joinToString(", ")})"
+        if (failedCasks.isEmpty() && pinBlocked == null)
             summaryWarnings += "Some brew packages failed to upgrade"
     }
     // Surface casks that brew refuses to upgrade as-is (even on exit 0)
@@ -193,7 +198,7 @@ private fun RunContext.brewUpgradeTimedOut(output: String, casks: Boolean): Int 
 
 /** The package of the last "==> Upgrading X" / "==> Installing X" line brew printed. */
 internal fun lastBrewStep(output: String): String? {
-    val step = Regex("""^==> (?:Upgrading|Installing) ([A-Za-z][\w@.+/-]*)""")
+    val step = Regex("""^==> (?:Upgrading|Installing) (?!\d+ outdated)([A-Za-z0-9][\w@.+/-]*)""")
     return output.lines().asReversed().firstNotNullOfOrNull { step.find(it.trim())?.groupValues?.get(1) }
 }
 
@@ -226,6 +231,16 @@ internal fun parseBrewFailedCasks(output: String): List<String> {
         .filter { it.contains(": It seems") || it.contains(": Failed") }
         .map { it.substringBefore(":").trim() }
         .filter { it.isNotBlank() }
+}
+
+/**
+ * (pins, blocked formulae) from brew's refusals, null when there are none:
+ *   "Error: You must `brew unpin libssh2 llvm` as installing vim requires the latest version of pinned dependencies."
+ */
+internal fun parseBrewPinBlocked(output: String): Pair<List<String>, List<String>>? {
+    val refusals = Regex("""Error: You must `brew unpin ([^`]+)` as installing (\S+) requires""").findAll(output).toList()
+    if (refusals.isEmpty()) return null
+    return refusals.flatMap { it.groupValues[1].split(" ") }.distinct() to refusals.map { it.groupValues[2] }.distinct()
 }
 
 /**
@@ -812,7 +827,7 @@ fun RunContext.selfUpdate() {
     val latestTag = fetchLatestReleaseTag()
     if (latestTag == null) {
         bufPrint("${YELLOW}Could not reach GitHub to check for updates$RESET")
-        summaryWarnings += "marstech-uplink: could not check for updates (no network or rate limited)"
+        summaryWarnings += "marstech-uplink: could not check for updates (no published release, no network or rate limited)"
         return
     }
 
@@ -908,7 +923,8 @@ private fun RunContext.fetchLatestReleaseTag(): String? {
             "--jq", ".tagName",
             timeoutSeconds = 10
         )?.trim()
-        if (!tag.isNullOrBlank()) return tag
+        // captureOutput merges stderr: on a repo without releases gh prints "release not found".
+        if (tag != null && Regex("""v?\d+(\.\d+)*""").matches(tag)) return tag
     }
     // Fallback: GitHub REST API via curl (public repo, no auth required)
     val json = captureOutput(
