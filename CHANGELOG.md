@@ -11,6 +11,9 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `Tool` enum (`Tool.kt`) — single source of truth for the `--only` values, the `[tools]` config keys
+  and the binaries probed in PATH; replaces six hand-maintained copies of the tool list
+- `--only pip` — was listed in `--help` but rejected by the CLI
 - `selfUpdate()` updater — checks GitHub Releases for a newer version, downloads the correct
   platform binary (`aarch_64` or `x86_64`), and replaces the installed binary atomically via `mv`
 - `selfupdate` config key in `[tools]` section — disable with `selfupdate = false` in `config.toml`

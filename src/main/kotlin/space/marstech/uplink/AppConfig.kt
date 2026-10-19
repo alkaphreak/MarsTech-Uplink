@@ -4,50 +4,16 @@ import java.io.File
 
 /**
  * Per-tool enable/disable flags read from the [tools] section of config.toml.
- * All tools are enabled by default.
+ * All tools are enabled by default; only the disabled ones are stored.
  */
-data class ToolsConfig(
-    val brew: Boolean = true,
-    val codex: Boolean = true,
-    val sdkman: Boolean = true,
-    val npm: Boolean = true,
-    val uv: Boolean = true,
-    val rustup: Boolean = true,
-    val cargo: Boolean = true,
-    val pipx: Boolean = true,
-    val pip: Boolean = true,
-    val gh: Boolean = true,
-    val macos: Boolean = true,
-    val mas: Boolean = true,
-    val ohmyzsh: Boolean = true,
-    val selfupdate: Boolean = true,
-    val backupShells: Boolean = true,
-    val backupKeeweb: Boolean = true,
-) {
-    /** Returns false when the tool has been explicitly disabled in config.toml. */
-    fun isEnabled(tool: String): Boolean = when (tool.lowercase()) {
-        "brew"           -> brew
-        "codex"          -> codex
-        "sdkman"         -> sdkman
-        "npm"            -> npm
-        "uv"             -> uv
-        "rustup"         -> rustup
-        "cargo"          -> cargo
-        "pipx"           -> pipx
-        "pip"            -> pip
-        "gh"             -> gh
-        "macos"          -> macos
-        "mas"            -> mas
-        "ohmyzsh"        -> ohmyzsh
-        "selfupdate",
-        "self-update",
-        "self_update"    -> selfupdate
-        "backup-shells",
-        "backup_shells"  -> backupShells
-        "backup-keeweb",
-        "backup_keeweb"  -> backupKeeweb
-        else             -> true   // unknown tools are enabled by default
-    }
+data class ToolsConfig(val disabled: Set<Tool> = emptySet()) {
+    fun isEnabled(tool: Tool): Boolean = tool !in disabled
+
+    /** Returns false when the tool has been explicitly disabled in config.toml; unknown names are enabled. */
+    fun isEnabled(tool: String): Boolean = Tool.fromName(tool)?.let(::isEnabled) ?: true
+
+    val backupShells: Boolean get() = isEnabled(Tool.BACKUP_SHELLS)
+    val backupKeeweb: Boolean get() = isEnabled(Tool.BACKUP_KEEWEB)
 }
 
 /**
@@ -137,22 +103,7 @@ data class AppConfig(
             |[tools]
             |# Set to false to permanently skip a tool on every run.
             |# (Use --only <tool> on the CLI to run a single tool regardless of this setting.)
-            |brew          = true
-            |codex         = true
-            |sdkman        = true
-            |npm           = true
-            |uv            = true
-            |rustup        = true
-            |cargo         = true
-            |pipx          = true
-            |pip           = true
-            |gh            = true
-            |macos         = true
-            |mas           = true
-            |ohmyzsh       = true
-            |selfupdate    = true
-            |backup_shells = true
-            |backup_keeweb = true
+            ${Tool.entries.joinToString("\n") { "|%-13s = true".format(it.key) }}
             |
             |[brew]
             |# Kill 'brew upgrade --greedy' past this many minutes (Intel Macs can otherwise
@@ -182,24 +133,7 @@ data class AppConfig(
                 "keeweb_retention"         to "5",
                 "log_retention"            to "5",
             ),
-            "tools" to linkedMapOf(
-                "brew"          to "true",
-                "codex"         to "true",
-                "sdkman"        to "true",
-                "npm"           to "true",
-                "uv"            to "true",
-                "rustup"        to "true",
-                "cargo"         to "true",
-                "pipx"          to "true",
-                "pip"           to "true",
-                "gh"            to "true",
-                "macos"         to "true",
-                "mas"           to "true",
-                "ohmyzsh"       to "true",
-                "selfupdate"    to "true",
-                "backup_shells" to "true",
-                "backup_keeweb" to "true",
-            ),
+            "tools" to Tool.entries.associateTo(linkedMapOf()) { it.key to "true" },
             "brew" to linkedMapOf(
                 "upgrade_timeout_minutes" to "30",
                 "skip_build_from_source"  to "false",
@@ -295,22 +229,9 @@ data class AppConfig(
                 keewebRetention        = int("backups.keeweb_retention",          d.keewebRetention),
                 logRetention           = int("backups.log_retention",             d.logRetention),
                 tools = ToolsConfig(
-                    brew          = bool("tools.brew",          d.tools.brew),
-                    codex         = bool("tools.codex",         d.tools.codex),
-                    sdkman        = bool("tools.sdkman",        d.tools.sdkman),
-                    npm           = bool("tools.npm",           d.tools.npm),
-                    uv            = bool("tools.uv",            d.tools.uv),
-                    rustup        = bool("tools.rustup",        d.tools.rustup),
-                    cargo         = bool("tools.cargo",         d.tools.cargo),
-                    pipx          = bool("tools.pipx",          d.tools.pipx),
-                    pip           = bool("tools.pip",           d.tools.pip),
-                    gh            = bool("tools.gh",            d.tools.gh),
-                    macos         = bool("tools.macos",         d.tools.macos),
-                    mas           = bool("tools.mas",           d.tools.mas),
-                    ohmyzsh       = bool("tools.ohmyzsh",       d.tools.ohmyzsh),
-                    selfupdate    = bool("tools.selfupdate",    d.tools.selfupdate),
-                    backupShells  = bool("tools.backup_shells", d.tools.backupShells),
-                    backupKeeweb  = bool("tools.backup_keeweb", d.tools.backupKeeweb),
+                    disabled = Tool.entries.filterTo(mutableSetOf()) {
+                        !bool("tools.${it.key}", d.tools.isEnabled(it))
+                    },
                 ),
                 brew = BrewConfig(
                     upgradeTimeoutMinutes = int("brew.upgrade_timeout_minutes", d.brew.upgradeTimeoutMinutes),

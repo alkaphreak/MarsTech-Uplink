@@ -124,12 +124,7 @@ private fun Process.killTree() {
  * Builds the tool-presence map by running all `which` checks in parallel.
  * Populate RunContext.toolsPresent before Phase 2 starts.
  */
-fun buildToolsPresent(): Map<String, Boolean> {
-    val tools = setOf(
-        "brew", "mas", "npm", "node", "uv", "rustup", "pipx", "pip", "pip3",
-        "gh", "omz", "softwareupdate", "codex", "cargo"
-    )
-    return tools
+fun buildToolsPresent(): Map<String, Boolean> =
+    Tool.allBinaries
         .map { tool -> tool to CompletableFuture.supplyAsync { commandExists(tool) } }
         .associate { (tool, f) -> tool to f.get() }
-}

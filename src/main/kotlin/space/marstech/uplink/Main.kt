@@ -23,8 +23,6 @@ import kotlin.system.exitProcess
     version = ["marstech-uplink 1.0.0"],
     footer = [
         "",
-        "Tools for --only: brew  sdkman  npm  uv  codex  rustup  cargo  pipx  pip  gh  macos  mas  ohmyzsh  selfupdate",
-        "",
         "Examples:",
         "  marstech-uplink",
         "  marstech-uplink --dry-run",
@@ -48,7 +46,8 @@ class MacUpdateCommand : Callable<Int> {
 
     @Option(
         names = ["--only"],
-        description = ["Run a single updater. Valid: brew, sdkman, npm, uv, codex, rustup, cargo, pipx, pip, gh, macos, mas, ohmyzsh, selfupdate"]
+        completionCandidates = SelectableToolNames::class,
+        description = ["Run a single updater. Valid: \${COMPLETION-CANDIDATES}"]
     )
     var onlyTool: String? = null
 
@@ -58,18 +57,15 @@ class MacUpdateCommand : Callable<Int> {
     )
     var configPath: String? = null
 
-    private val validTools = setOf(
-        "brew", "sdkman", "npm", "uv", "codex", "rustup", "cargo", "pipx", "gh", "macos", "mas", "ohmyzsh", "selfupdate"
-    )
-
     override fun call(): Int {
         // Must be set before any Config lazy val is accessed
         configPath?.let { Config.configFileOverride = File(it.expandHome()) }
 
-        val tool = onlyTool?.lowercase()
-        if (tool != null && tool !in validTools) {
-            System.err.println("Unknown tool for --only: $onlyTool. Valid: ${validTools.sorted().joinToString(", ")}")
-            return 1
+        val tool = onlyTool?.let { name ->
+            Tool.fromName(name)?.takeIf { it.selectable }?.key ?: run {
+                System.err.println("Unknown tool for --only: $name. Valid: ${Tool.selectable.joinToString(", ") { it.key }}")
+                return 1
+            }
         }
 
         AnsiConsole.systemInstall()
@@ -197,31 +193,31 @@ class MacUpdateCommand : Callable<Int> {
             // npm missing at probe time: brew may relink the node keg (MARSTECH-747). The npm task then starts
             // only once brew is done, so it parks no thread and its Timings entry measures npm, not the wait.
             val npmExecutor = if (brewFuture != null && !ctx.toolPresent("npm")) executor.after(brewFuture) else executor
-            launchIf(ctx, "sdkman",  executor, ctx::sdkmanUpdate)
-            launchIf(ctx, "uv",      executor, ctx::uvUpdate)
-            launchIf(ctx, "npm",     npmExecutor) { ctx.npmUpdateAfterBrewIfMissing(brewFuture) }
-            launchIf(ctx, "rustup",  executor, ctx::rustupUpdate)
-            launchIf(ctx, "cargo",   executor, ctx::cargoUpdate)
-            launchIf(ctx, "pipx",    executor, ctx::pipxUpdate)
-            launchIf(ctx, "pip",     executor, ctx::pipUpdate)
-            launchIf(ctx, "gh",      executor, ctx::ghExtUpdate)
-            launchIf(ctx, "macos",   executor) {
+            launchIf(ctx, Tool.SDKMAN,  executor, ctx::sdkmanUpdate)
+            launchIf(ctx, Tool.UV,      executor, ctx::uvUpdate)
+            launchIf(ctx, Tool.NPM,     npmExecutor) { ctx.npmUpdateAfterBrewIfMissing(brewFuture) }
+            launchIf(ctx, Tool.RUSTUP,  executor, ctx::rustupUpdate)
+            launchIf(ctx, Tool.CARGO,   executor, ctx::cargoUpdate)
+            launchIf(ctx, Tool.PIPX,    executor, ctx::pipxUpdate)
+            launchIf(ctx, Tool.PIP,     executor, ctx::pipUpdate)
+            launchIf(ctx, Tool.GH,      executor, ctx::ghExtUpdate)
+            launchIf(ctx, Tool.MACOS,   executor) {
                 if (ctx.toolPresent("softwareupdate")) ctx.macosUpdate()
                 else {
                     ctx.bufPrint("softwareupdate not found, skipping macOS update")
                     ctx.summarySkipped += "macOS update (softwareupdate not available)"
                 }
             }
-            launchIf(ctx, "mas",     executor) {
+            launchIf(ctx, Tool.MAS,     executor) {
                 if (ctx.toolPresent("mas")) ctx.masUpdate()
                 else {
                     ctx.bufPrint("mas not found, skipping")
                     ctx.summarySkipped += "Mac App Store (mas not installed)"
                 }
             }
-            launchIf(ctx, "ohmyzsh",    executor, ctx::ohmyzshUpdate)
+            launchIf(ctx, Tool.OHMYZSH,    executor, ctx::ohmyzshUpdate)
             // selfupdate runs last — avoids replacing the binary while other tasks are in flight
-            launchIf(ctx, "selfupdate", executor, ctx::selfUpdate)
+            launchIf(ctx, Tool.SELFUPDATE, executor, ctx::selfUpdate)
         }
 
     /**
@@ -252,14 +248,14 @@ class MacUpdateCommand : Callable<Int> {
      *  When the tool is disabled in config, records a skip entry with a hint on how to re-enable it. */
     private fun MutableList<CompletableFuture<Void>>.launchIf(
         ctx: RunContext,
-        tool: String,
+        tool: Tool,
         executor: Executor,
         block: () -> Unit,
     ) {
         when {
-            ctx.shouldRun(tool) -> add(ctx.launchAsync(tool, executor, block))
+            ctx.shouldRun(tool.key) -> add(ctx.launchAsync(tool.key, executor, block))
             ctx.onlyTool == null && !Config.appConfig.tools.isEnabled(tool) ->
-                ctx.summarySkipped += "$tool (disabled in config — set $tool = true in [tools] to re-enable)"
+                ctx.summarySkipped += "${tool.key} (disabled in config — set ${tool.key} = true in [tools] to re-enable)"
         }
     }
 }

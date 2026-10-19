@@ -5,7 +5,7 @@
 - Runtime starts in `src/main/kotlin/space/marstech/uplink/Main.kt`: `main()` -> `MacUpdateCommand.call()` -> `runUpdate()`.
 - `runUpdate()` is organized into fixed phases: pre-flight, backups, updates, final summary. Preserve that phase model when adding features.
 - `--backup-only` flag (`RunContext.backupOnly`) skips all phases except backups, then exits 0; pre-flight and updates are never called.
-- `--only <tool>` skips pre-flight and backups entirely — only the updater phase runs (see `Main.kt` lines 83–86). Valid tools: `brew`, `sdkman`, `npm`, `uv`, `codex`, `rustup`, `cargo`, `pipx`, `gh`, `macos`, `mas`, `ohmyzsh`, `selfupdate`. (`pip` runs automatically but is not registered in `validTools` — `--only pip` is rejected.)
+- `--only <tool>` skips pre-flight and backups entirely — only the updater phase runs (see `Main.kt` lines 83–86). Valid tools: every `Tool` with `selectable = true` (`brew`, `codex`, `sdkman`, `npm`, `uv`, `rustup`, `cargo`, `pipx`, `pip`, `gh`, `macos`, `mas`, `ohmyzsh`, `selfupdate`); the backup tasks are config-only.
 - `--config <path>` overrides the default config file location (`Config.configFileOverride`).
 - Exit code: `runUpdate()` returns `1` if `ctx.summaryFailed` is non-empty, otherwise `0`.
 
@@ -15,12 +15,13 @@
 - Updaters run concurrently through `launchAsync(...)` in `Main.kt`; output is buffered per thread via `RunContext.taskBuffer` so logs do not interleave.
 - `brew` and `codex` are intentionally coupled: they run inside one async task because `codex` is upgraded through Homebrew and must come after `brewUpdate()`.
 - `selfUpdate()` runs **last** in the pipeline to avoid replacing the binary while other tasks are still in flight. It prefers `gh` CLI for tag lookup and falls back to the GitHub REST API via `curl`.
-- `pip` (`pipUpdate()`) upgrades `pip`/`pip3` itself via `pip install --upgrade pip`; it is wired into `buildUpdateFutures` and controlled by `[tools] pip` in `config.toml`, but is **not** in `validTools` so `--only pip` is rejected at the CLI layer.
+- `pip` (`pipUpdate()`) upgrades `pip`/`pip3` itself via `pip install --upgrade pip`; it is wired into `buildUpdateFutures`, controlled by `[tools] pip` in `config.toml`, and selectable with `--only pip`.
+- `Tool.kt` is the single source of truth for tools: the `Tool` enum drives the `--only` values (help text and validation), the `[tools]` keys (default TOML, missing-key repair, parsing) and the binaries probed by `buildToolsPresent()`. Adding a tool = one enum entry + its updater + a `launchIf(ctx, Tool.X, ...)` line.
 - Tool detection is front-loaded in `buildToolsPresent()` (`ProcessUtils.kt`) and then read through `RunContext.toolPresent()`; tests often stub this map instead of invoking real `which` calls.
 - `RunContext.shouldRun(tool)` is the single gate controlling whether an updater executes: `--only` overrides config; otherwise the `[tools]` section of `config.toml` decides. Always call `shouldRun()` (via `launchIf`) rather than invoking updaters directly.
 
 ## Project-specific patterns to follow
-- For a new updater, add a `fun RunContext.<name>Update()` in `Updaters.kt` and use this pattern:
+- For a new updater, add a `Tool` entry in `Tool.kt`, a `fun RunContext.<name>Update()` in `Updaters.kt`, and use this pattern:
   - `section("...")` for headings
   - early `dryRun` branch that only logs and updates summary state
   - `toolPresent(...)` / file existence guards

@@ -49,13 +49,12 @@ marstech-uplink --help
 | `rustup`     | Rust toolchain                                                                          |
 | `cargo`      | Cargo-installed binaries (requires `cargo-update` crate)                               |
 | `pipx`       | pipx-managed tools                                                                      |
+| `pip`        | pip / pip3 itself (`pip install --upgrade pip`)                                         |
 | `gh`         | GitHub CLI extensions                                                                   |
 | `macos`      | macOS software updates                                                                  |
 | `mas`        | Mac App Store applications                                                              |
 | `ohmyzsh`    | Oh My Zsh framework                                                                     |
 | `selfupdate` | Self-update — checks GitHub Releases and replaces the binary if a newer version exists |
-
-> **Note:** `pip` runs automatically as part of every full update (`pip install --upgrade pip`) but is not yet supported by `--only`.
 
 ## Build
 
@@ -101,6 +100,7 @@ Preferred automated flow (SDKMAN bootstrap + build + install + smoke test):
 ```
 src/main/kotlin/space/marstech/uplink/
 ├── Main.kt          # picocli @Command entry point, phase orchestration
+├── Tool.kt          # Tool enum: single source for --only values, [tools] keys and probed binaries
 ├── Config.kt        # paths, env var resolution, log management
 ├── Colors.kt        # ANSI color constants (jansi-managed TTY detection)
 ├── RunContext.kt    # run state, buffered output, tool cache
