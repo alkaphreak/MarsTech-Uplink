@@ -6,8 +6,22 @@ import space.marstech.uplink.RunContext
 import space.marstech.uplink.captureOutput
 import space.marstech.uplink.runProcess
 import space.marstech.uplink.section
+import java.util.concurrent.Future
 
 private const val CARGO_TOOLS = "Cargo packages"
+
+/**
+ * Runs [cargoUpdate], re-probing cargo after brew when it was missing at tool-detection time:
+ * brew relinks an unlinked rust keg at the end of its task (MARSTECH-793, same race as MARSTECH-747).
+ */
+internal fun RunContext.cargoUpdateAfterBrewIfMissing(brewDone: Future<*>?) {
+    if (!toolPresent("cargo") && brewDone != null) {
+        brewDone.get()  // already done when Main.kt deferred this task with Executor.after(brew)
+        bufPrint("cargo was not found at startup — re-checking now that Homebrew is done (it may have relinked the rust keg)")
+        recheckTool("cargo")
+    }
+    cargoUpdate()
+}
 
 fun RunContext.cargoUpdate() {
     section("Cargo installed packages update")

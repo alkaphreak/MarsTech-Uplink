@@ -30,8 +30,8 @@ fun RunContext.brewUpdate() {
     val outdated = captureOutput("brew", "outdated", "--verbose")
     bufPrint(outdated.takeUnless { it.isNullOrBlank() } ?: "All Homebrew packages are up to date")
 
-    val upgradeExit = brewUpgrade()
-    brewCleanupAndDoctor(upgradeExit)
+    brewUpgrade()
+    brewCleanupAndDoctor()
     brewLinkUnlinkedKegs()
     summaryUpdated += "Homebrew"
 }
@@ -268,7 +268,7 @@ private fun RunContext.brewSurfaceDeprecationWarnings(output: String) {
         .forEach { formula -> summaryWarnings += "brew deprecated: $formula — consider: brew uninstall $formula" }
 }
 
-private fun RunContext.brewCleanupAndDoctor(upgradeExit: Int) {
+private fun RunContext.brewCleanupAndDoctor() {
     section("Homebrew cleanup")
     val result = runCaptured("brew", "cleanup", "-s", "--prune=all")
     // Filter out individual "Removing:" lines — only keep summary and warnings
@@ -284,8 +284,7 @@ private fun RunContext.brewCleanupAndDoctor(upgradeExit: Int) {
         ?.let { bufPrint(it) }
 
     // Always run 'brew doctor' — not just on upgrade failures — to surface deprecated packages
-    val doctorSection = if (upgradeExit != 0) "Homebrew doctor (triggered by upgrade failure)" else "Homebrew doctor"
-    section(doctorSection)
+    section("Homebrew doctor")
     val doctorResult = runCaptured("brew", "doctor")
     val doctorOut = doctorResult.output
     // Suppress the "Your system is ready to brew." success line to avoid noise
@@ -336,7 +335,9 @@ private fun RunContext.brewLinkUnlinkedKegs() {
     kegs.forEach { keg ->
         bufPrint("Linking $keg...")
         val result = runCaptured("brew", "link", "--overwrite", keg)
-        if (result.exitCode != 0) {
+        if (result.exitCode == 0) {
+            bufPrint("Linked $keg")
+        } else {
             // Detect "is not writable" — typically caused by Docker Desktop owning /usr/local/lib/docker
             val notWritableLine = result.output.lines()
                 .firstOrNull { it.contains("is not writable", ignoreCase = true) }
