@@ -19,7 +19,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `selfupdate` config key in `[tools]` section — disable with `selfupdate = false` in `config.toml`
 - `compareVersions()` — semver comparison helper (internal, unit-tested)
 - Task timing breakdown in SUMMARY terminal (`Timings:` table, sorted slowest-first) and in log
-- `Config.UPLINK_VERSION` constant — single source of truth for the current version string
+- `Config.UPLINK_VERSION` — read from `version.properties`, stamped from the pom `<version>` at build time
 - `parseBrewCannotUpgradeCasks()` — detects `Warning: The cask '...' cannot be upgraded as-is`
   lines in `brew upgrade` output; routes to `summaryWarnings` with a `brew reinstall --cask` hint
 - `extractDeprecatedFromDoctorOutput()` — parses `brew doctor` deprecated formula/cask names
@@ -27,6 +27,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Released binaries reported a hardcoded `1.0.0` (in `--version` and self-update) whatever the
+  released version, so self-update kept reinstalling the latest release on every run
 - Race condition between `brew outdated` and `brew update`: `CompletableFuture.supplyAsync`
   removed — both commands now run sequentially, eliminating `lockf: already locked` errors
 - `codexUpdate()` now uses `--cask` flag (`brew outdated --cask codex` / `brew upgrade --cask codex`),

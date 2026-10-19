@@ -77,6 +77,20 @@ class ConfigTest {
     }
 
     @Test
+    fun `UPLINK_VERSION is the pom version stamped at build time`() {
+        val pomVersion = Regex("<artifactId>uplink</artifactId>\\s*<version>([^<]+)</version>")
+            .find(java.io.File("pom.xml").readText())!!.groupValues[1]
+        assertEquals(pomVersion, Config.UPLINK_VERSION)
+        assertNotEquals(Config.DEV_VERSION, Config.UPLINK_VERSION)
+    }
+
+    @Test
+    fun `--version prints the stamped version`() {
+        val provider = UplinkVersionProvider()
+        assertArrayEquals(arrayOf("marstech-uplink ${Config.UPLINK_VERSION}"), provider.version)
+    }
+
+    @Test
     fun `fromName resolves keys and aliases case-insensitively`() {
         assertEquals(Tool.PIP, Tool.fromName("PIP"))
         assertEquals(Tool.SELFUPDATE, Tool.fromName("self-update"))

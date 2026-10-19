@@ -824,6 +824,13 @@ fun RunContext.selfUpdate() {
         return
     }
 
+    // An unstamped build has no comparable version: any release would look newer and be reinstalled.
+    if (Config.UPLINK_VERSION == Config.DEV_VERSION) {
+        bufPrint("${YELLOW}Unversioned build (not packaged by Maven) — skipping self-update$RESET")
+        summarySkipped += "marstech-uplink self-update (unversioned dev build)"
+        return
+    }
+
     val latestTag = fetchLatestReleaseTag()
     if (latestTag == null) {
         bufPrint("${YELLOW}Could not reach GitHub to check for updates$RESET")

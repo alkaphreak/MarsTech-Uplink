@@ -1,0 +1,7 @@
+{
+  "resources": {
+    "includes": [
+      { "pattern": "\\Qspace/marstech/uplink/version.properties\\E" }
+    ]
+  }
+}

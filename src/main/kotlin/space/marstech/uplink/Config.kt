@@ -12,7 +12,20 @@ import java.time.format.DateTimeFormatter
  */
 object Config {
 
-    const val UPLINK_VERSION = "1.0.0"
+    /** Placeholder when the build did not stamp a version (e.g. classes compiled by the IDE without Maven). */
+    const val DEV_VERSION = "dev"
+
+    /**
+     * Current version — single source of truth is the pom `<version>` (stamped into
+     * version.properties by Maven resource filtering; release.yml sets it via `mvn versions:set`).
+     */
+    val UPLINK_VERSION: String by lazy {
+        runCatching {
+            Config::class.java.getResourceAsStream("version.properties")?.use { stream ->
+                java.util.Properties().apply { load(stream) }.getProperty("version")
+            }
+        }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() && !it.startsWith("\${") } ?: DEV_VERSION
+    }
 
     val HOME: String = System.getenv("HOME") ?: error("HOME environment variable not set")
     val dateStr: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)

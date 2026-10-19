@@ -32,7 +32,7 @@
 
 ## Filesystem and external integration points
 - `Config.repoRoot` resolves through `AppConfig` (loaded from the user config file); shell snapshots are written under `confs/snapshots/...` relative to that root.
-- `Config.UPLINK_VERSION` is the single source of truth for the current version string; used by `selfUpdate()` to compare against the latest GitHub Release tag.
+- The pom `<version>` is the single source of truth for the version: Maven resource filtering stamps it into `src/main/resources/space/marstech/uplink/version.properties`, read lazily by `Config.UPLINK_VERSION` (also feeds `--version` via `UplinkVersionProvider`). Never hardcode a version string; `release.yml` only runs `mvn versions:set`. The native image embeds that file through `META-INF/native-image/space.marstech/uplink/resource-config.json`. An unstamped build reports `dev` and `selfUpdate()` skips itself.
 - Task durations are accumulated in `RunContext.taskDurations` and printed as a `Timings:` table in the final summary (sorted slowest-first).
 - KeeWeb source and backup destination are configured via `AppConfig.keewebSource` / `AppConfig.keewebBackupDir`; paths default to `~/KeeWeb/myKeeweb.kdbx` and `~/Backup/Apps/KeeWeb`.
 - KeeWeb backups are device-scoped: `backupKeewebDb()` writes files as `YYYY-MM-DD-<device>-<source>.kdbx` and enforces retention per device pattern, not globally per source filename.

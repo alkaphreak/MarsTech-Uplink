@@ -311,6 +311,12 @@ class UpdatersTest {
         assertEquals(0, compareVersions("1.0", "1.0.0"))
     }
 
+    @Test
+    fun `a release older than the local snapshot is not offered`() {
+        assertTrue(compareVersions("1.0.0", "1.1.0-SNAPSHOT") < 0)
+        assertTrue(compareVersions("1.1.0", "1.0.0-SNAPSHOT") > 0)
+    }
+
     // -------------------------------------------------------------------------
     // brew cask exclusions (MARSTECH-782)
     // -------------------------------------------------------------------------

@@ -20,7 +20,7 @@ import kotlin.system.exitProcess
     name = "marstech-uplink",
     description = ["Updates all development tools, packages, and system software on macOS."],
     mixinStandardHelpOptions = true,
-    version = ["marstech-uplink 1.0.0"],
+    versionProvider = UplinkVersionProvider::class,
     footer = [
         "",
         "Examples:",
@@ -258,6 +258,11 @@ class MacUpdateCommand : Callable<Int> {
                 ctx.summarySkipped += "${tool.key} (disabled in config — set ${tool.key} = true in [tools] to re-enable)"
         }
     }
+}
+
+/** Feeds `--version` from [Config.UPLINK_VERSION]. */
+class UplinkVersionProvider : CommandLine.IVersionProvider {
+    override fun getVersion(): Array<String> = arrayOf("marstech-uplink ${Config.UPLINK_VERSION}")
 }
 
 /**
