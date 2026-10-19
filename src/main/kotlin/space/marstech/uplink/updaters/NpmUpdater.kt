@@ -17,8 +17,8 @@ internal fun RunContext.npmUpdateAfterBrewIfMissing(brewDone: Future<*>?) {
     if (!toolPresent("npm") && brewDone != null) {
         brewDone.get()  // already done when Main.kt deferred this task with Executor.after(brew)
         bufPrint("npm was not found at startup — re-checking now that Homebrew is done (it may have relinked the node keg)")
-        if (toolPresent("npm") && toolPresent("node"))
-            toolsPresent = toolsPresent + mapOf("npm" to true, "node" to true)
+        recheckTool("npm")
+        recheckTool("node")
     }
     if (toolPresent("npm")) return npmUpdate()
     bufPrint("${YELLOW}Warning: npm not found in PATH, skipping$RESET")

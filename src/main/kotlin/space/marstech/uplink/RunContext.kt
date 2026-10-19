@@ -71,6 +71,15 @@ class RunContext(
             ?: processRunner?.let { runCatching { it.run(listOf("which", cmd), null, null).exitCode == 0 }.getOrDefault(false) }
             ?: commandExists(cmd)
 
+    /**
+     * Drops the startup probe result for [cmd] and checks it live again, caching the new answer.
+     * Needed after brew relinks a keg: [toolPresent] alone would keep returning the cached `false`.
+     */
+    fun recheckTool(cmd: String): Boolean {
+        toolsPresent = toolsPresent - cmd
+        return toolPresent(cmd).also { toolsPresent = toolsPresent + (cmd to it) }
+    }
+
     // -------------------------------------------------------------------------
     // Buffered output + real-time log
     // -------------------------------------------------------------------------

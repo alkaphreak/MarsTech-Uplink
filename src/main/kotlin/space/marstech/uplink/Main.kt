@@ -10,7 +10,7 @@ import space.marstech.uplink.Colors.GREEN
 import space.marstech.uplink.Colors.RESET
 import space.marstech.uplink.Colors.YELLOW
 import space.marstech.uplink.updaters.brewUpdate
-import space.marstech.uplink.updaters.cargoUpdate
+import space.marstech.uplink.updaters.cargoUpdateAfterBrewIfMissing
 import space.marstech.uplink.updaters.codexUpdate
 import space.marstech.uplink.updaters.ghExtUpdate
 import space.marstech.uplink.updaters.macosUpdate
@@ -210,11 +210,13 @@ class MacUpdateCommand : Callable<Int> {
             // npm missing at probe time: brew may relink the node keg (MARSTECH-747). The npm task then starts
             // only once brew is done, so it parks no thread and its Timings entry measures npm, not the wait.
             val npmExecutor = if (brewFuture != null && !ctx.toolPresent("npm")) executor.after(brewFuture) else executor
+            // Same for cargo and the rust keg (MARSTECH-793).
+            val cargoExecutor = if (brewFuture != null && !ctx.toolPresent("cargo")) executor.after(brewFuture) else executor
             launchIf(ctx, Tool.SDKMAN,  executor, ctx::sdkmanUpdate)
             launchIf(ctx, Tool.UV,      executor, ctx::uvUpdate)
             launchIf(ctx, Tool.NPM,     npmExecutor) { ctx.npmUpdateAfterBrewIfMissing(brewFuture) }
             launchIf(ctx, Tool.RUSTUP,  executor, ctx::rustupUpdate)
-            launchIf(ctx, Tool.CARGO,   executor, ctx::cargoUpdate)
+            launchIf(ctx, Tool.CARGO,   cargoExecutor) { ctx.cargoUpdateAfterBrewIfMissing(brewFuture) }
             launchIf(ctx, Tool.PIPX,    executor, ctx::pipxUpdate)
             launchIf(ctx, Tool.PIP,     executor, ctx::pipUpdate)
             launchIf(ctx, Tool.GH,      executor, ctx::ghExtUpdate)

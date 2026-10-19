@@ -104,6 +104,14 @@ class ProcessUtilsTest {
     }
 
     @Test
+    fun `recheckTool replaces a cached false with the live result`() {
+        val ctx = RunContext(dryRun = true)
+        ctx.toolsPresent = mapOf("sh" to false)
+        assertTrue(ctx.recheckTool("sh"))
+        assertTrue(ctx.toolPresent("sh"))
+    }
+
+    @Test
     fun `timeout sends SIGTERM before SIGKILL so the process can clean up`() {
         val marker = File.createTempFile("uplink-sigterm", ".txt").apply { delete() }
         val ctx = RunContext(dryRun = true)
