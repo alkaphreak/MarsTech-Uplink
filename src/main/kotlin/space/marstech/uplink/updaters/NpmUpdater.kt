@@ -4,7 +4,6 @@ import space.marstech.uplink.Colors.RESET
 import space.marstech.uplink.Colors.YELLOW
 import space.marstech.uplink.RunContext
 import space.marstech.uplink.captureOutput
-import space.marstech.uplink.commandExists
 import space.marstech.uplink.runProcess
 import space.marstech.uplink.section
 import java.util.concurrent.Future
@@ -18,7 +17,7 @@ internal fun RunContext.npmUpdateAfterBrewIfMissing(brewDone: Future<*>?) {
     if (!toolPresent("npm") && brewDone != null) {
         brewDone.get()  // already done when Main.kt deferred this task with Executor.after(brew)
         bufPrint("npm was not found at startup — re-checking now that Homebrew is done (it may have relinked the node keg)")
-        if (commandExists("npm") && commandExists("node"))
+        if (toolPresent("npm") && toolPresent("node"))
             toolsPresent = toolsPresent + mapOf("npm" to true, "node" to true)
     }
     if (toolPresent("npm")) return npmUpdate()

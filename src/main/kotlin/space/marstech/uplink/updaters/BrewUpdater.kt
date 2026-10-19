@@ -7,7 +7,6 @@ import space.marstech.uplink.Config
 import space.marstech.uplink.ProcessResult
 import space.marstech.uplink.RunContext
 import space.marstech.uplink.captureOutput
-import space.marstech.uplink.commandExists
 import space.marstech.uplink.runCaptured
 import space.marstech.uplink.section
 
@@ -357,12 +356,12 @@ private fun RunContext.brewLinkUnlinkedKegs() {
 }
 
 private fun RunContext.findUnlinkedKegs(): List<String> = when {
-    commandExists("jq") -> captureOutput(
+    toolPresent("jq") -> captureOutput(
         "bash", "-c",
         "brew info --json=v1 --installed 2>/dev/null | jq -r '.[] | select(.keg_only == false) | select(.linked_keg == null) | .name' 2>/dev/null"
     )?.lines()?.filter { it.isNotBlank() } ?: emptyList()
 
-    commandExists("python3") -> captureOutput(
+    toolPresent("python3") -> captureOutput(
         "bash", "-c",
         """brew info --json=v1 --installed 2>/dev/null | python3 -c "
 import sys, json

@@ -27,7 +27,7 @@
   - `toolPresent(...)` / file existence guards
   - record outcomes in `summaryUpdated`, `summarySkipped`, `summaryWarnings`, `summaryFailed`
 - Use `bufPrint(...)` instead of `println(...)` inside updater/backups/pre-flight code; direct prints will break the buffered parallel output model. `bufPrint` also writes every line to the log file in real-time via `logImmediate()`.
-- Use `runProcess`, `runShell`, `captureOutput`, or `runCaptured` from `ProcessUtils.kt` instead of raw `ProcessBuilder` unless you need custom process handling.
+- Use `runProcess`, `runShell`, `captureOutput`, or `runCaptured` from `ProcessUtils.kt` instead of raw `ProcessBuilder` unless you need custom process handling, and `toolPresent(...)` instead of `commandExists(...)` inside updaters: both go through the injectable `RunContext.processRunner` seam that tests fake.
 - Keep CLI-facing strings explicit and operational; this tool is closer to an automation script than a domain model.
 
 ## Filesystem and external integration points
@@ -57,7 +57,7 @@
 - Use `--dry-run` and `--only <tool>` for safe debugging of one updater without touching the full machine.
 
 ## Non-obvious caveats
-- Surefire runs the tests with `HOME=target/test-home` (MARSTECH-765): the config, log and KeeWeb paths resolved through `Config.HOME` stay under `target/`, never the real ones. Tests are still smoke-level, not hermetic: they run real read-only commands (`which`, `sh`, `softwareupdate --list`).
+- Surefire runs the tests with `HOME=target/test-home` (MARSTECH-765): the config, log and KeeWeb paths resolved through `Config.HOME` stay under `target/`, never the real ones. Updater tests are hermetic: they inject a `FakeProcessRunner` (`src/test/kotlin/.../FakeProcessRunner.kt`) through `RunContext(processRunner = …)`, so no external command runs and failure/timeout branches are testable; only `ProcessUtilsTest` runs real read-only commands (`which`, `sh`) to cover the real `ProcessBuilder` path.
 - Config paths in `AppConfig` default to generic placeholders (`~/KeeWeb/…`, `~/MyWorkspace/…`); the real paths are user-defined in `config.toml`.
-- `macosUpdate()` dry-run still calls `softwareupdate --list`; under Surefire this emits a known `Corrupted channel by directly writing to native stream` warning in `target/surefire-reports/*.dumpstream`.
+- `macosUpdate()` dry-run still calls `softwareupdate --list` for real runs; tests avoid it via the fake runner (it used to emit a `Corrupted channel` warning in `target/surefire-reports/*.dumpstream`).
 - Ignore `target/` for source edits; the real implementation lives only under `src/main/kotlin` and `src/test/kotlin`.

@@ -4,7 +4,6 @@ import space.marstech.uplink.Colors.RESET
 import space.marstech.uplink.Colors.YELLOW
 import space.marstech.uplink.RunContext
 import space.marstech.uplink.captureOutput
-import space.marstech.uplink.commandExists
 import space.marstech.uplink.runProcess
 import space.marstech.uplink.section
 
@@ -28,7 +27,7 @@ fun RunContext.cargoUpdate() {
 
     // 'cargo install-update' is a subcommand provided by the cargo-update crate.
     // Its binary is registered as 'cargo-install-update' — check for it explicitly.
-    if (!commandExists("cargo-install-update")) {
+    if (!toolPresent("cargo-install-update")) {
         bufPrint("${YELLOW}cargo-update not installed — cannot update cargo packages")
         bufPrint("  Install with: cargo install cargo-update$RESET")
         summaryWarnings += "Cargo: install cargo-update to enable package updates — cargo install cargo-update"

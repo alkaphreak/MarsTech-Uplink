@@ -12,6 +12,8 @@ class RunContext(
     val dryRun: Boolean = false,
     val backupOnly: Boolean = false,
     val onlyTool: String? = null,
+    /** Runs external commands; `null` = real processes. Tests inject a fake (see [ProcessRunner]). */
+    val processRunner: ProcessRunner? = null,
 ) {
     // Summary state — thread-safe collections for parallel producers
     val summaryUpdated  = CopyOnWriteArrayList<String>()
@@ -60,9 +62,14 @@ class RunContext(
         return Config.appConfig.tools.isEnabled(tool)
     }
 
-    /** Returns cached tool-presence result; falls back to a live check if the key is unknown. */
+    /**
+     * Returns cached tool-presence result; falls back to a live `which` check if the key is unknown
+     * (through [processRunner] when one is injected).
+     */
     fun toolPresent(cmd: String): Boolean =
-        toolsPresent[cmd] ?: commandExists(cmd)
+        toolsPresent[cmd]
+            ?: processRunner?.let { runCatching { it.run(listOf("which", cmd), null, null).exitCode == 0 }.getOrDefault(false) }
+            ?: commandExists(cmd)
 
     // -------------------------------------------------------------------------
     // Buffered output + real-time log

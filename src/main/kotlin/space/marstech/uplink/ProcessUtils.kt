@@ -5,6 +5,15 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
+/**
+ * Seam for running external commands. `null` in [RunContext.processRunner] (the default) means real processes;
+ * tests inject a fake to run the updaters' real (non dry-run) paths without touching the machine.
+ * Implementations return exit code 124 on timeout and may throw when the command cannot be started.
+ */
+fun interface ProcessRunner {
+    fun run(cmd: List<String>, workDir: File?, timeoutSeconds: Long?): ProcessResult
+}
+
 /** Checks whether a command is available in PATH. */
 fun commandExists(cmd: String): Boolean =
     runCatching { ProcessBuilder("which", cmd).start().waitFor() == 0 }
@@ -18,10 +27,10 @@ fun commandExists(cmd: String): Boolean =
  */
 fun RunContext.runProcess(vararg cmd: String, workDir: File? = null, timeoutSeconds: Long? = null): Int = runCatching {
     val buf = taskBuffer.get()
-    if (buf != null) {
+    if (buf != null || processRunner != null) {
         // Streams each line to the log as it arrives; the buffer is flushed at task end anyway.
         val result = runCaptured(*cmd, workDir = workDir, timeoutSeconds = timeoutSeconds, stream = true)
-        buf.append(result.output)
+        if (buf != null) buf.append(result.output) else print(result.output)
         return@runCatching result.exitCode
     }
     val proc = ProcessBuilder(*cmd).apply { workDir?.let { directory(it) } }.inheritIO().start()
@@ -83,6 +92,11 @@ private fun RunContext.runCapturedOrThrow(
     timeoutSeconds: Long?,
     stream: Boolean,
 ): ProcessResult {
+    processRunner?.let { runner ->
+        val result = runner.run(cmd.toList(), workDir, timeoutSeconds)
+        if (stream) result.output.lineSequence().filter { it.isNotEmpty() }.forEach { logImmediate(it) }
+        return result
+    }
     val proc = ProcessBuilder(*cmd)
         .redirectErrorStream(true)
         .apply { workDir?.let { directory(it) } }

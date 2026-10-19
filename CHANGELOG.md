@@ -25,6 +25,10 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `extractDeprecatedFromDoctorOutput()` — parses `brew doctor` deprecated formula/cask names
 - `brew doctor` now always runs (not only on upgrade failure); deprecated packages surface in SUMMARY
 
+- `ProcessRunner` seam (`RunContext.processRunner`, `null` = real processes) — updater tests inject a
+  `FakeProcessRunner`, so they no longer run `softwareupdate`/`which` and now cover the real (non dry-run)
+  failure, timeout and restart branches
+
 ### Changed
 
 - Split the 950-line `Updaters.kt` into one file per tool under the `updaters` package

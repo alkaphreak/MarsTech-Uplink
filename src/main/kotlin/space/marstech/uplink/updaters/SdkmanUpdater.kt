@@ -2,7 +2,6 @@ package space.marstech.uplink.updaters
 
 import space.marstech.uplink.Config
 import space.marstech.uplink.RunContext
-import space.marstech.uplink.commandExists
 import space.marstech.uplink.runShell
 import space.marstech.uplink.section
 import java.io.File
@@ -28,7 +27,7 @@ fun RunContext.sdkmanUpdate() {
 
     // SDKMAN helper scripts use ${var^^} (bash 4+ syntax); run in zsh 5.9+ or Homebrew bash 4+
     val sdkmanShell = when {
-        commandExists("zsh") -> "zsh"
+        toolPresent("zsh") -> "zsh"
         File("/opt/homebrew/bin/bash").exists() -> "/opt/homebrew/bin/bash"
         else -> {
             bufPrint("Warning: SDKMAN requires zsh 5.9+ or bash 4+ (brew install bash)")

@@ -7,8 +7,8 @@ import org.junit.jupiter.api.Test
 
 /**
  * Smoke-level tests for all updater functions.
- * Updaters are called in dry-run mode with toolsPresent pre-populated so no
- * real processes are executed. Each test verifies that the function produces
+ * Updaters are called in dry-run mode with toolsPresent pre-populated and a
+ * [FakeProcessRunner] injected, so no real process is executed (unlisted tools are absent). Each test verifies that the function produces
  * exactly one entry in either summaryUpdated or summarySkipped.
  */
 class UpdatersTest {
@@ -17,7 +17,7 @@ class UpdatersTest {
     // Helpers
     // -------------------------------------------------------------------------
 
-    private fun dryCtx(vararg tools: Pair<String, Boolean>) = RunContext(dryRun = true).also { ctx ->
+    private fun dryCtx(vararg tools: Pair<String, Boolean>) = RunContext(dryRun = true, processRunner = FakeProcessRunner()).also { ctx ->
         ctx.toolsPresent = mapOf(*tools)
     }
 
