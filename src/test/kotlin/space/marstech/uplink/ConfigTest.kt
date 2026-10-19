@@ -108,4 +108,50 @@ class ConfigTest {
         assertEquals(1, cmd.execute("--only", "backup_shells"))
         assertEquals(1, cmd.execute("--only", "nope"))
     }
+
+    private fun load(toml: String): ConfigLoadResult {
+        val file = java.io.File.createTempFile("uplink-config", ".toml").apply { deleteOnExit() }
+        file.writeText(toml)
+        return AppConfig.loadWithMeta(file)
+    }
+
+    @Test
+    fun `a valid default config produces no warning`() {
+        val file = java.io.File.createTempFile("uplink-config", ".toml").apply { delete(); deleteOnExit() }
+        assertTrue(AppConfig.loadWithMeta(file).created)
+        assertEquals(emptyList<String>(), AppConfig.loadWithMeta(file).warnings)
+    }
+
+    @Test
+    fun `invalid values fall back to the default with a line-numbered warning`() {
+        val result = load("[backups]\nlog_retention = 0\nkeeweb_retention = five\n[tools]\nuv = flase\n")
+        assertEquals(5, result.config.logRetention)
+        assertEquals(5, result.config.keewebRetention)
+        assertTrue(result.config.tools.isEnabled(Tool.UV))
+        assertEquals(3, result.warnings.size, result.warnings.toString())
+        assertTrue(result.warnings[0].contains("line 2") && result.warnings[0].contains("backups.log_retention"))
+        assertTrue(result.warnings[2].contains("expected true or false"))
+    }
+
+    @Test
+    fun `unknown sections, unknown keys and duplicates are reported`() {
+        val warnings = load("[tool]\nuv = false\n[tools]\nuvv = false\nnpm = false\nnpm = true\ngarbage\n").warnings
+        assertEquals(4, warnings.size, warnings.toString())
+        assertTrue(warnings[0].contains("unknown section [tool]"))
+        assertTrue(warnings[1].contains("unknown key 'tools.uvv'"))
+        assertTrue(warnings[2].contains("duplicate key 'tools.npm'"))
+        assertTrue(warnings[3].contains("cannot parse 'garbage'"))
+    }
+
+    @Test
+    fun `a multi-line array is reported instead of silently dropped`() {
+        val warnings = load("[brew]\nexclude_casks = [\n  \"a\",\n]\n").warnings
+        assertTrue(warnings.any { it.contains("single-line array") }, warnings.toString())
+    }
+
+    @Test
+    fun `a hash inside a quoted string is kept`() {
+        assertEquals("~/My #1 dir", AppConfig.parseValue("\"~/My #1 dir\" # comment"))
+        assertEquals("30", AppConfig.parseValue("30 # minutes"))
+    }
 }

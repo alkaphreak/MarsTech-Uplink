@@ -40,16 +40,19 @@ object Config {
 
     /**
      * Lazily loaded user configuration. See [AppConfig] for all available keys.
-     * The pair carries (config, wasJustCreated) — evaluated once on first access.
+     * Evaluated once on first access.
      */
-    private val configLoadResult: Pair<AppConfig, Boolean> by lazy {
+    private val configLoadResult: ConfigLoadResult by lazy {
         AppConfig.loadWithMeta(configFile)
     }
 
-    val appConfig: AppConfig get() = configLoadResult.first
+    val appConfig: AppConfig get() = configLoadResult.config
 
     /** True only on the very first run, when the config file did not yet exist. */
-    val configWasCreated: Boolean get() = configLoadResult.second
+    val configWasCreated: Boolean get() = configLoadResult.created
+
+    /** Problems found in the config file; each affected entry fell back to its default. */
+    val configWarnings: List<String> get() = configLoadResult.warnings
 
     /** Convenience shorthand — resolved through [appConfig]. */
     val repoRoot: String get() = appConfig.shellSnapshotDir

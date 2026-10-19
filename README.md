@@ -181,6 +181,10 @@ skip_build_from_source  = false
 exclude_casks           = []
 ```
 
+Missing keys are added to the file automatically on the next run. An unknown section or key, a
+duplicate, or an invalid value (wrong type, retention or timeout below 1, multi-line array) is ignored
+in favor of the default and reported with its line number at startup and in the final summary warnings.
+
 Excluded casks that are outdated are listed under `Skipped:` in the summary; upgrade them by
 hand with `brew upgrade --cask <name>`.
 

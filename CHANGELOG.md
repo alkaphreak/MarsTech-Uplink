@@ -29,6 +29,10 @@ Versions follow [Semantic Versioning](https://semver.org/).
   `FakeProcessRunner`, so they no longer run `softwareupdate`/`which` and now cover the real (non dry-run)
   failure, timeout and restart branches
 
+- Config validation — unknown sections/keys, duplicates and invalid values (wrong type, retention or
+  timeout below 1, multi-line array) now fall back to the default with a line-numbered warning in the
+  start banner and the summary, instead of being silently ignored
+
 ### Changed
 
 - Split the 950-line `Updaters.kt` into one file per tool under the `updaters` package
@@ -36,6 +40,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A ` #` inside a quoted config value (e.g. `"~/My #1 dir"`) no longer truncates the value
 - Released binaries reported a hardcoded `1.0.0` (in `--version` and self-update) whatever the
   released version, so self-update kept reinstalling the latest release on every run
 - Race condition between `brew outdated` and `brew update`: `CompletableFuture.supplyAsync`

@@ -36,13 +36,24 @@ data class BrewConfig(
 )
 
 /**
+ * Outcome of [AppConfig.loadWithMeta]: the resolved config, whether the file was just created,
+ * and human-readable problems found in it (each one fell back to the default value).
+ */
+data class ConfigLoadResult(
+    val config: AppConfig,
+    val created: Boolean,
+    val warnings: List<String> = emptyList(),
+)
+
+/**
  * User-editable application configuration.
  *
  * Loaded once (lazily) from [Config.configFile]:
  *   ~/Library/Application Support/marstech/marstech-uplink/config.toml
  *
  * If the file is absent it is created with sensible defaults on first run.
- * If a key is missing or the file is malformed the default value is used silently.
+ * A missing key is injected with its default; an unknown, duplicated or invalid entry falls back to
+ * the default and is reported in [ConfigLoadResult.warnings].
  */
 data class AppConfig(
     // [paths]
@@ -141,58 +152,110 @@ data class AppConfig(
             ),
         )
 
+        /** Minimum accepted value for integer keys (a retention or timeout of 0 would wipe or kill everything). */
+        private val INT_MIN = mapOf(
+            "backups.shell_snapshot_retention" to 1,
+            "backups.keeweb_retention"         to 1,
+            "backups.log_retention"            to 1,
+            "brew.upgrade_timeout_minutes"     to 1,
+        )
+
         /**
-         * Reads the config file and returns a [Pair] of ([AppConfig], wasJustCreated).
-         * Creates the file with defaults when absent — wasJustCreated is true in that case.
+         * Reads the config file. Creates it with defaults when absent ([ConfigLoadResult.created] is true).
          * If the file exists but has missing keys, they are injected in-place with default
          * values so the user can see and edit them.
-         * Falls back to [defaults] on any parse error — never throws.
+         * Falls back to [defaults] on any read error — never throws.
          */
-        fun loadWithMeta(file: File): Pair<AppConfig, Boolean> {
+        fun loadWithMeta(file: File): ConfigLoadResult {
             if (!file.exists()) {
                 runCatching {
                     file.parentFile?.mkdirs()
                     file.writeText(DEFAULT_TOML)
                 }
-                return Pair(defaults(), true)
+                return ConfigLoadResult(defaults(), created = true)
             }
-            val (config, foundKeys) = runCatching { parseWithKeys(file) }
-                .getOrElse { Pair(defaults(), emptySet()) }
-            repairMissingKeys(file, foundKeys)
-            return Pair(config, false)
+            val parsed = runCatching { parseWithKeys(file) }.getOrElse { e ->
+                return ConfigLoadResult(defaults(), created = false, listOf("cannot read ${file.name}: ${e.message} — using defaults"))
+            }
+            repairMissingKeys(file, parsed.foundKeys)
+            return ConfigLoadResult(parsed.config, created = false, parsed.warnings)
         }
+
+        private class Parsed(val config: AppConfig, val foundKeys: Set<String>, val warnings: List<String>)
 
         // -----------------------------------------------------------------
         // Minimal TOML parser — supports [sections], key = "string",
         // key = integer, key = boolean, single-line ["string", ...] arrays,
-        // and # comments.
-        // No external dependencies required.
+        // and # comments. Kept dependency-free for the native image; every
+        // entry is validated against EXPECTED_KEYS (its default gives the type).
         // -----------------------------------------------------------------
 
-        /** Parses the file and returns the resolved config plus the set of keys that were found. */
-        private fun parseWithKeys(file: File): Pair<AppConfig, Set<String>> {
-            val values = mutableMapOf<String, String>()  // "section.key" -> raw value
-            var section = ""
+        /** Strips an inline comment and the surrounding quotes; a `#` inside a quoted string is kept. */
+        internal fun parseValue(rawValue: String): String {
+            val v = rawValue.trim()
+            if (v.startsWith("\"")) {
+                val end = v.indexOf('"', 1)
+                if (end > 0) return v.substring(1, end)
+            }
+            return v.substringBefore(" #").substringBefore("\t#").trim().removeSurrounding("\"")
+        }
 
-            file.forEachLine { raw ->
+        /** Returns why [value] is invalid for [key] (typed by its default in [EXPECTED_KEYS]), or null when valid. */
+        private fun invalidReason(key: String, value: String, default: String): String? = when {
+            default == "true" || default == "false" ->
+                "expected true or false".takeIf { value.lowercase() !in setOf("true", "false") }
+            default.startsWith("[") ->
+                "expected a single-line array like [\"a\", \"b\"]".takeIf { !(value.startsWith("[") && value.endsWith("]")) }
+            default.startsWith("\"") ->
+                "expected a non-empty string".takeIf { value.isBlank() }
+            else -> {
+                val min = INT_MIN[key] ?: 0
+                "expected an integer >= $min".takeIf { (value.toIntOrNull() ?: Int.MIN_VALUE) < min }
+            }
+        }
+
+        /** Parses and validates the file: resolved config, keys found (valid or not) and warnings. */
+        private fun parseWithKeys(file: File): Parsed {
+            val values   = mutableMapOf<String, String>()  // "section.key" -> raw value, valid entries only
+            val found    = mutableSetOf<String>()
+            val warnings = mutableListOf<String>()
+            var section  = ""
+
+            file.readLines().forEachIndexed { idx, raw ->
                 val line = raw.trim()
+                val at   = "${file.name} line ${idx + 1}"
                 when {
                     line.isEmpty() || line.startsWith("#") -> Unit
-                    line.startsWith("[") && line.endsWith("]") ->
+                    line.startsWith("[") && line.endsWith("]") -> {
                         section = line.removeSurrounding("[", "]").trim()
+                        if (section !in EXPECTED_KEYS) warnings += "$at: unknown section [$section] — ignored"
+                    }
                     line.contains("=") -> {
                         val eqIdx = line.indexOf('=')
                         val key   = line.substring(0, eqIdx).trim()
-                        val value = line.substring(eqIdx + 1)
-                            .substringBefore(" #")   // strip inline comments before the quotes
-                            .trim()
-                            .removePrefix("\"").removeSuffix("\"")
-                        values["$section.$key"] = value
+                        val value = parseValue(line.substring(eqIdx + 1))
+                        val full  = "$section.$key"
+                        val default = EXPECTED_KEYS[section]?.get(key)
+                        when {
+                            section !in EXPECTED_KEYS -> Unit  // already reported with the section
+                            default == null -> warnings += "$at: unknown key '$full' — ignored"
+                            else -> {
+                                if (!found.add(full)) warnings += "$at: duplicate key '$full' — this value wins"
+                                val reason = invalidReason(full, value, default)
+                                if (reason != null) {
+                                    values -= full
+                                    warnings += "$at: invalid $full = $value — $reason, using default $default"
+                                } else {
+                                    values[full] = value
+                                }
+                            }
+                        }
                     }
+                    else -> warnings += "$at: cannot parse '$line' — ignored"
                 }
             }
 
-            return Pair(buildConfig(values), values.keys.toSet())
+            return Parsed(buildConfig(values), found, warnings)
         }
 
         /** Builds an [AppConfig] from a pre-parsed key→value map. */

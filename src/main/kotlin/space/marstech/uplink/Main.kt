@@ -92,6 +92,7 @@ class MacUpdateCommand : Callable<Int> {
 
     private fun runUpdate(normalizedTool: String?): Int {
         val ctx = RunContext(dryRun = dryRun, backupOnly = backupOnly, onlyTool = normalizedTool)
+        Config.configWarnings.forEach { ctx.summaryWarnings += "Config: $it" }
 
         printStartBanner()
 
@@ -131,10 +132,12 @@ class MacUpdateCommand : Callable<Int> {
             println("$CYAN  Config : ${Config.configFile.absolutePath}$RESET")
         }
         println("$CYAN  Log    : ${Config.logFile.absolutePath}$RESET")
+        Config.configWarnings.forEach { println("$YELLOW  Config warning: $it$RESET") }
         println()
 
         Config.appendLog("Started: ${Config.dateStr} | Host: ${Config.cachedDeviceName}\n")
         Config.appendLog("Config:  ${Config.configFile.absolutePath} (created=${Config.configWasCreated})\n")
+        Config.configWarnings.forEach { Config.appendLog("Config warning: $it\n") }
     }
 
     @Suppress("SameReturnValue")
