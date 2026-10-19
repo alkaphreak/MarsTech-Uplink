@@ -25,6 +25,11 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `extractDeprecatedFromDoctorOutput()` — parses `brew doctor` deprecated formula/cask names
 - `brew doctor` now always runs (not only on upgrade failure); deprecated packages surface in SUMMARY
 
+### Changed
+
+- Split the 950-line `Updaters.kt` into one file per tool under the `updaters` package
+  (`updaters/<Tool>Updater.kt`); no behavior change
+
 ### Fixed
 
 - Released binaries reported a hardcoded `1.0.0` (in `--version` and self-update) whatever the

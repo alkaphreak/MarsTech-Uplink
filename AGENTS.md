@@ -11,7 +11,7 @@
 
 ## Core architecture
 - Shared mutable run state lives in `src/main/kotlin/space/marstech/uplink/RunContext.kt`.
-- Most behavior is implemented as `RunContext` extension functions, not classes: see `Backups.kt`, `PreFlight.kt`, `Updaters.kt`, and `Summary.kt`.
+- Most behavior is implemented as `RunContext` extension functions, not classes: see `Backups.kt`, `PreFlight.kt`, `Summary.kt`, and the `updaters/` package (one `<Tool>Updater.kt` per tool, package `space.marstech.uplink.updaters`).
 - Updaters run concurrently through `launchAsync(...)` in `Main.kt`; output is buffered per thread via `RunContext.taskBuffer` so logs do not interleave.
 - `brew` and `codex` are intentionally coupled: they run inside one async task because `codex` is upgraded through Homebrew and must come after `brewUpdate()`.
 - `selfUpdate()` runs **last** in the pipeline to avoid replacing the binary while other tasks are still in flight. It prefers `gh` CLI for tag lookup and falls back to the GitHub REST API via `curl`.
@@ -21,7 +21,7 @@
 - `RunContext.shouldRun(tool)` is the single gate controlling whether an updater executes: `--only` overrides config; otherwise the `[tools]` section of `config.toml` decides. Always call `shouldRun()` (via `launchIf`) rather than invoking updaters directly.
 
 ## Project-specific patterns to follow
-- For a new updater, add a `Tool` entry in `Tool.kt`, a `fun RunContext.<name>Update()` in `Updaters.kt`, and use this pattern:
+- For a new updater, add a `Tool` entry in `Tool.kt`, a `fun RunContext.<name>Update()` in a new `updaters/<Name>Updater.kt` (imported explicitly in `Main.kt`), and use this pattern:
   - `section("...")` for headings
   - early `dryRun` branch that only logs and updates summary state
   - `toolPresent(...)` / file existence guards

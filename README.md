@@ -106,7 +106,7 @@ src/main/kotlin/space/marstech/uplink/
 ├── RunContext.kt    # run state, buffered output, tool cache
 ├── ProcessUtils.kt  # runProcess, captureOutput, runCaptured, commandExists
 ├── Backups.kt       # backupShellConfigs, backupKeewebDb, pruneShellSnapshots, pruneKeewebBackups
-├── Updaters.kt      # 14 update functions (brew, sdkman, npm, uv, codex, rustup, cargo, pipx, pip, gh, macos, mas, ohmyzsh, selfupdate)
+├── updaters/        # one <Tool>Updater.kt per tool (Brew, Sdkman, Npm, Uv, Codex, Rustup, Cargo, Pipx, Pip, Gh, Macos, Mas, OhMyZsh, Self)
 ├── PreFlight.kt     # checkTouchIdSudo
 └── Summary.kt       # printSummary, sendNotification, phase headers
 ```
