@@ -39,6 +39,16 @@ class BackupsTest {
     }
 
     @Test
+    fun `backupKeewebDb timeout is a warning and does not block the run`() {
+        val fake = FakeProcessRunner(responses = listOf(listOf("cp") to ProcessResult(124, "")))
+        val ctx = RunContext(dryRun = false, processRunner = fake)
+        ctx.backupKeewebDb()
+        assertTrue(ctx.summaryWarnings.any { it.startsWith("KeeWeb backup timed out") }, "${ctx.summaryWarnings}")
+        assertTrue(ctx.summaryFailed.isEmpty())
+        assertTrue(ctx.summaryUpdated.none { it.contains("KeeWeb") })
+    }
+
+    @Test
     fun `backupKeewebDb in dry-run does not throw`() {
         val ctx = RunContext(dryRun = true)
         assertDoesNotThrow { ctx.backupKeewebDb() }
