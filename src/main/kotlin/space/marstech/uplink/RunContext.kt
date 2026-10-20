@@ -74,7 +74,10 @@ class RunContext(
     /**
      * Drops the startup probe result for [cmd] and checks it live again, caching the new answer.
      * Needed after brew relinks a keg: [toolPresent] alone would keep returning the cached `false`.
+     * Synchronized: the npm and cargo tasks both run right after brew and would otherwise overwrite
+     * each other's copy of the map.
      */
+    @Synchronized
     fun recheckTool(cmd: String): Boolean {
         toolsPresent = toolsPresent - cmd
         return toolPresent(cmd).also { toolsPresent = toolsPresent + (cmd to it) }

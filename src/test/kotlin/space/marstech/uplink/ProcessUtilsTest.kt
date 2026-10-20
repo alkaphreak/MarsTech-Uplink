@@ -112,6 +112,20 @@ class ProcessUtilsTest {
     }
 
     @Test
+    fun `concurrent recheckTool calls keep every result`() {
+        val ctx = RunContext(dryRun = true)
+        val tools = listOf("sh", "ls", "cat", "echo", "env", "pwd", "date", "uname")
+        ctx.toolsPresent = tools.associateWith { false }
+        val pool = Executors.newFixedThreadPool(tools.size)
+        try {
+            CompletableFuture.allOf(*tools.map { CompletableFuture.runAsync({ ctx.recheckTool(it) }, pool) }.toTypedArray()).join()
+        } finally {
+            pool.shutdown()
+        }
+        assertEquals(tools.associateWith { true }, ctx.toolsPresent)
+    }
+
+    @Test
     fun `timeout sends SIGTERM before SIGKILL so the process can clean up`() {
         val marker = File.createTempFile("uplink-sigterm", ".txt").apply { delete() }
         val ctx = RunContext(dryRun = true)
