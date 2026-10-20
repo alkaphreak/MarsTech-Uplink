@@ -69,6 +69,9 @@ internal fun pruneShellSnapshots(
 
 private const val KEE_WEB_BACKUP = "KeeWeb backup"
 
+/** The database weighs about 1 MB: a copy still running after this is blocked, not slow. */
+internal const val KEE_WEB_COPY_TIMEOUT_S = 60L
+
 internal fun pruneKeewebBackups(
     destDir: File,
     deviceName: String,
@@ -95,26 +98,42 @@ fun RunContext.backupKeewebDb() {
     // in the same directory and rotation is scoped per device.
     val dest       = File(destDir, "${Config.dateStr}-$deviceName-${src.name}")
 
-    if (!src.exists()) {
-        bufPrint("Warning: ${src.absolutePath} not found, skipping KeeWeb backup")
-        summarySkipped += "KeeWeb backup (source not found)"
-        return
-    }
-
     if (dryRun) {
+        if (!src.exists()) {
+            bufPrint("Warning: ${src.absolutePath} not found, skipping KeeWeb backup")
+            summarySkipped += "KeeWeb backup (source not found)"
+            return
+        }
         bufPrint("[DRY-RUN] Would copy: ${src.absolutePath} -> ${dest.absolutePath}")
         summaryUpdated += KEE_WEB_BACKUP
         return
     }
 
     destDir.mkdirs()
-    runCatching { src.copyTo(dest, overwrite = true) }
-        .onSuccess { bufPrint("Saved: ${dest.absolutePath}") }
-        .onFailure {
-            bufPrint("Warning: Failed to backup KeePass database")
+    // The source may sit on a cloud File Provider (Dropbox) whose read can wait forever on a macOS
+    // permission prompt, and an in-JVM read cannot be interrupted: copy through a killable `cp` (MARSTECH-811).
+    // Even the existence check goes through it, since stat on such a path can block the same way.
+    val result = runCaptured("cp", src.absolutePath, dest.absolutePath, timeoutSeconds = KEE_WEB_COPY_TIMEOUT_S)
+    when {
+        result.exitCode == 0 -> bufPrint("Saved: ${dest.absolutePath}")
+        result.exitCode == 124 -> {
+            dest.delete()  // a killed cp leaves a truncated file that retention would count as a backup
+            bufPrint("Warning: KeeWeb backup timed out after ${KEE_WEB_COPY_TIMEOUT_S}s, skipping")
+            summaryWarnings += "KeeWeb backup timed out after ${KEE_WEB_COPY_TIMEOUT_S}s (${src.absolutePath})"
+            return
+        }
+        "${src.absolutePath}: No such file" in result.output -> {
+            bufPrint("Warning: ${src.absolutePath} not found, skipping KeeWeb backup")
+            summarySkipped += "KeeWeb backup (source not found)"
+            return
+        }
+        else -> {
+            dest.delete()
+            bufPrint("Warning: Failed to backup KeePass database: ${result.output.trim()}")
             summaryFailed += KEE_WEB_BACKUP
             return
         }
+    }
     summaryUpdated += KEE_WEB_BACKUP
 
     // Retain only the N most recent backups FOR THIS DEVICE
