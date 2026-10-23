@@ -38,6 +38,7 @@
 - KeeWeb backups are device-scoped: `backupKeewebDb()` writes files as `YYYY-MM-DD-<device>-<source>.kdbx` and enforces retention per device pattern, not globally per source filename.
 - User config file: `~/Library/Application Support/marstech/marstech-uplink/config.toml` — auto-created with placeholder defaults on first run. See `AppConfig.kt` for all keys.
   - The `[tools]` section maps every tool name to a boolean; set `ohmyzsh = false` to permanently skip a tool without touching the CLI. Managed via `ToolsConfig` and read through `RunContext.shouldRun()`. Includes `backup_shells` and `backup_keeweb` flags for the backup phase.
+  - The `[brew]` section holds `upgrade_timeout_minutes` (one budget shared by the formula then cask upgrade), `skip_build_from_source` (`--force-bottle`, formulae only) and `exclude_casks` (single-line `["a", "b"]` array, MARSTECH-782): casks left out of the unattended upgrade because their install/uninstall waits on an admin password. The minimal TOML parser supports no other array form.
   - If a key is missing from an existing config file, `AppConfig.repairMissingKeys()` injects it with its default value in-place on every startup — no manual migration needed when adding new config keys.
   - Every entry is validated against `EXPECTED_KEYS` (the default value gives the type; `INT_MIN` gives integer floors): unknown/duplicate/invalid entries fall back to the default and become `Config.configWarnings`, printed in the start banner and added to `summaryWarnings`. A new key only needs its default in `EXPECTED_KEYS` to be validated.
 - Logs are always appended to `~/Library/Logs/marstech/marstech-uplink/marstech-uplink-YYYY-MM-DD.log`, one `--- Run started` block per run. Never open that file in a truncating mode: it wipes the day's earlier runs (MARSTECH-765).
@@ -46,6 +47,8 @@
 
 ## Build, test, and debug workflow
 - Verified test command: `mvn test`.
+- CI: `.github/workflows/ci.yml` runs `mvn -B verify` on `macos-latest` for every pull request and push to `main` (macOS runner because the tests call real macOS commands). `release.yml` is the separate manual native-release workflow.
+- `./build-install.sh` starts with `mvn clean`: never write anything you want to keep (e.g. a build log) under `target/`.
 - Common build commands from the repo:
   - `mvn verify`
   - `mvn package` -> produces `target/marstech-uplink.jar`
