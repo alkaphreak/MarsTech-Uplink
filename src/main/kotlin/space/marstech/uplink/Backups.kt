@@ -117,8 +117,9 @@ fun RunContext.backupKeewebDb() {
     // Even the existence check goes through it, since stat on such a path can block the same way.
     // Copy to a unique hidden temp file, then rename it over `dest`: `dest` may already hold a valid
     // backup from an earlier run the same day, which a failed or killed copy must not touch (MARSTECH-816).
-    // The temp name does not end with the device suffix, so retention never counts it.
-    val tmp = runCatching { File.createTempFile(".${dest.name}.", ".tmp", destDir) }.getOrElse { e ->
+    // The temp name does not end with the device suffix, so retention never counts it. NIO creates it
+    // owner-only (0600) and cp keeps the mode of an existing target, so the backup stays private.
+    val tmp = runCatching { Files.createTempFile(destDir.toPath(), ".${dest.name}.", ".tmp").toFile() }.getOrElse { e ->
         bufPrint("Warning: Failed to backup KeePass database: ${e.message}")
         summaryFailed += KEE_WEB_BACKUP
         return
