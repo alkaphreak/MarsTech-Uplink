@@ -115,12 +115,16 @@ private fun RunContext.brewUpgrade(): Int {
     bufPrint(formulaResult.output, log = false)
     if (formulaResult.exitCode == 124) return brewUpgradeTimedOut(formulaResult.output, casks = false)
 
+    fun remaining() = budgetSeconds - (System.nanoTime() - startedAt) / 1_000_000_000
+    // Checked before listing too: 'brew outdated' can take minutes and must not run past the budget.
+    if (remaining() <= 0) return brewUpgradeTimedOut(formulaResult.output, casks = false)  // formulae spent the budget
     // Empty list = every outdated cask; null = nothing to run.
-    val casks = if (brewConfig.excludeCasks.isEmpty()) emptyList() else brewCasksToUpgrade(brewConfig.excludeCasks)
+    val casks = if (brewConfig.excludeCasks.isEmpty()) emptyList()
+        else brewCasksToUpgrade(brewConfig.excludeCasks, timeoutSeconds = minOf(300, remaining()))
     var result = formulaResult
     if (casks != null) {
-        val remaining = budgetSeconds - (System.nanoTime() - startedAt) / 1_000_000_000
-        if (remaining <= 0) return brewUpgradeTimedOut(formulaResult.output, casks = false)  // formulae spent the budget
+        val remaining = remaining()
+        if (remaining <= 0) return brewUpgradeTimedOut(formulaResult.output, casks = false)
         section("Homebrew upgrade — casks (--greedy)")
         val caskResult = runCaptured(
             "brew", "upgrade", "--cask", "--greedy", *casks.toTypedArray(),
@@ -140,7 +144,7 @@ private fun RunContext.brewUpgrade(): Int {
             summaryWarnings += "Brew casks failed to upgrade: ${failedCasks.joinToString(", ")}"
         if (pinBlocked != null)
             summaryWarnings += "brew: blocked by pins: ${pinBlocked.first.joinToString(", ")} -> " +
-                "${pinBlocked.second.size} formulae (${pinBlocked.second.joinToString(", ")})"
+                "${pinBlocked.second.size} ${if (pinBlocked.second.size == 1) "formula" else "formulae"} (${pinBlocked.second.joinToString(", ")})"
         if (failedCasks.isEmpty() && pinBlocked == null)
             summaryWarnings += "Some brew packages failed to upgrade"
     }
@@ -159,8 +163,8 @@ private fun RunContext.brewUpgrade(): Int {
  * or the outdated list could not be read (running a bare 'brew upgrade --cask' would then
  * pull in the excluded casks too). Excluded casks that are outdated go to summarySkipped.
  */
-private fun RunContext.brewCasksToUpgrade(excluded: List<String>): List<String>? {
-    val outdated = runCaptured("brew", "outdated", "--cask", "--greedy", "--quiet", timeoutSeconds = 300)
+private fun RunContext.brewCasksToUpgrade(excluded: List<String>, timeoutSeconds: Long): List<String>? {
+    val outdated = runCaptured("brew", "outdated", "--cask", "--greedy", "--quiet", timeoutSeconds = timeoutSeconds)
     if (outdated.exitCode != 0) {
         bufPrint("${YELLOW}Warning: could not list outdated casks (exit ${outdated.exitCode}) — skipping cask upgrades$RESET")
         summaryWarnings += "brew: outdated casks could not be listed, cask upgrades skipped"
