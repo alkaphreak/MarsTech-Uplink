@@ -1,6 +1,8 @@
 package space.marstech.uplink
 
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 fun RunContext.backupShellConfigs() {
     section("Backing up shell configs (.profile and .zshrc)")
@@ -113,26 +115,40 @@ fun RunContext.backupKeewebDb() {
     // The source may sit on a cloud File Provider (Dropbox) whose read can wait forever on a macOS
     // permission prompt, and an in-JVM read cannot be interrupted: copy through a killable `cp` (MARSTECH-811).
     // Even the existence check goes through it, since stat on such a path can block the same way.
-    val result = runCaptured("cp", src.absolutePath, dest.absolutePath, timeoutSeconds = KEE_WEB_COPY_TIMEOUT_S)
-    when {
-        result.exitCode == 0 -> bufPrint("Saved: ${dest.absolutePath}")
-        result.exitCode == 124 -> {
-            dest.delete()  // a killed cp leaves a truncated file that retention would count as a backup
-            bufPrint("Warning: KeeWeb backup timed out after ${KEE_WEB_COPY_TIMEOUT_S}s, skipping")
-            summaryWarnings += "KeeWeb backup timed out after ${KEE_WEB_COPY_TIMEOUT_S}s (${src.absolutePath})"
-            return
+    // Copy to a unique hidden temp file, then rename it over `dest`: `dest` may already hold a valid
+    // backup from an earlier run the same day, which a failed or killed copy must not touch (MARSTECH-816).
+    // The temp name does not end with the device suffix, so retention never counts it. NIO creates it
+    // owner-only (0600) and cp keeps the mode of an existing target, so the backup stays private.
+    val tmp = runCatching { Files.createTempFile(destDir.toPath(), ".${dest.name}.", ".tmp").toFile() }.getOrElse { e ->
+        bufPrint("Warning: Failed to backup KeePass database: ${e.message}")
+        summaryFailed += KEE_WEB_BACKUP
+        return
+    }
+    try {
+        val result = runCaptured("cp", src.absolutePath, tmp.absolutePath, timeoutSeconds = KEE_WEB_COPY_TIMEOUT_S)
+        when {
+            result.exitCode == 0 -> {
+                Files.move(tmp.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                bufPrint("Saved: ${dest.absolutePath}")
+            }
+            result.exitCode == 124 -> {
+                bufPrint("Warning: KeeWeb backup timed out after ${KEE_WEB_COPY_TIMEOUT_S}s, skipping")
+                summaryWarnings += "KeeWeb backup timed out after ${KEE_WEB_COPY_TIMEOUT_S}s (${src.absolutePath})"
+                return
+            }
+            "${src.absolutePath}: No such file" in result.output -> {
+                bufPrint("Warning: ${src.absolutePath} not found, skipping KeeWeb backup")
+                summarySkipped += "KeeWeb backup (source not found)"
+                return
+            }
+            else -> {
+                bufPrint("Warning: Failed to backup KeePass database: ${result.output.trim()}")
+                summaryFailed += KEE_WEB_BACKUP
+                return
+            }
         }
-        "${src.absolutePath}: No such file" in result.output -> {
-            bufPrint("Warning: ${src.absolutePath} not found, skipping KeeWeb backup")
-            summarySkipped += "KeeWeb backup (source not found)"
-            return
-        }
-        else -> {
-            dest.delete()
-            bufPrint("Warning: Failed to backup KeePass database: ${result.output.trim()}")
-            summaryFailed += KEE_WEB_BACKUP
-            return
-        }
+    } finally {
+        tmp.delete()  // no-op once renamed; otherwise drops the partial copy a killed cp leaves
     }
     summaryUpdated += KEE_WEB_BACKUP
 

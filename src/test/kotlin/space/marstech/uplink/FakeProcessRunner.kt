@@ -13,9 +13,12 @@ class FakeProcessRunner(
     private val responses: List<Pair<List<String>, ProcessResult>> = emptyList(),
 ) : ProcessRunner {
     val calls = CopyOnWriteArrayList<List<String>>()
+    /** Timeout requested by each call, in the same order as [calls]. */
+    val timeouts = CopyOnWriteArrayList<Long?>()
 
     override fun run(cmd: List<String>, workDir: File?, timeoutSeconds: Long?): ProcessResult {
         calls += cmd
+        timeouts += timeoutSeconds
         if (cmd.size == 2 && cmd[0] == "which") return ProcessResult(if (cmd[1] in installed) 0 else 1, "")
         return responses.firstOrNull { (prefix, _) -> cmd.take(prefix.size) == prefix }?.second
             ?: ProcessResult(0, "")

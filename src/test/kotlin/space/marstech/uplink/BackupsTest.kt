@@ -4,7 +4,9 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
+import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.PosixFilePermissions
 
 class BackupsTest {
 
@@ -46,6 +48,36 @@ class BackupsTest {
         assertTrue(ctx.summaryWarnings.any { it.startsWith("KeeWeb backup timed out") }, "${ctx.summaryWarnings}")
         assertTrue(ctx.summaryFailed.isEmpty())
         assertTrue(ctx.summaryUpdated.none { it.contains("KeeWeb") })
+        val cp = fake.calls.indexOfFirst { it.firstOrNull() == "cp" }
+        assertEquals(KEE_WEB_COPY_TIMEOUT_S, fake.timeouts[cp], "cp must run with the 60 s bound")
+    }
+
+    @Test
+    fun `backupKeewebDb publishes an owner-only backup`() {
+        val destDir = File(Config.appConfig.keewebBackupDir)
+        val name = File(Config.appConfig.keewebSource).name
+        val dest = File(destDir, "${Config.dateStr}-${Config.cachedDeviceName}-$name")
+        try {
+            RunContext(dryRun = false, processRunner = FakeProcessRunner()).backupKeewebDb()
+            assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(dest.toPath())))
+        } finally {
+            dest.delete()
+        }
+    }
+
+    @Test
+    fun `backupKeewebDb timeout keeps the backup saved earlier the same day`() {
+        val destDir = File(Config.appConfig.keewebBackupDir).apply { mkdirs() }
+        val name = File(Config.appConfig.keewebSource).name
+        val dest = File(destDir, "${Config.dateStr}-${Config.cachedDeviceName}-$name").apply { writeText("valid") }
+        try {
+            val fake = FakeProcessRunner(responses = listOf(listOf("cp") to ProcessResult(124, "")))
+            RunContext(dryRun = false, processRunner = fake).backupKeewebDb()
+            assertEquals("valid", dest.readText())
+            assertTrue(destDir.listFiles { f -> f.name.endsWith(".tmp") }.isNullOrEmpty(), "temp file left behind")
+        } finally {
+            dest.delete()
+        }
     }
 
     @Test
