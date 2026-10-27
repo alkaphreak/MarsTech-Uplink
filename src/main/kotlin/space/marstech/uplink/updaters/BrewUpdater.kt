@@ -110,8 +110,9 @@ private fun RunContext.brewUpgrade(): Int {
         if (brewConfig.skipBuildFromSource) add("--force-bottle")
     }
     section("Homebrew upgrade — formulae${if (brewConfig.skipBuildFromSource) " (--force-bottle)" else ""}")
+    val cltDedup = cltWarningDedup()  // shared by both upgrades: one CLT block per run
     // Streamed: a long from-source build must show progress in the log, not one burst at the end.
-    val formulaResult = runCaptured(*formulaArgs.toTypedArray(), timeoutSeconds = budgetSeconds, stream = true)
+    val formulaResult = runCaptured(*formulaArgs.toTypedArray(), timeoutSeconds = budgetSeconds, stream = true, lineFilter = cltDedup)
     bufPrint(formulaResult.output, log = false)
     if (formulaResult.exitCode == 124) return brewUpgradeTimedOut(formulaResult.output, casks = false)
 
@@ -128,7 +129,7 @@ private fun RunContext.brewUpgrade(): Int {
         section("Homebrew upgrade — casks (--greedy)")
         val caskResult = runCaptured(
             "brew", "upgrade", "--cask", "--greedy", *casks.toTypedArray(),
-            timeoutSeconds = caskBudget, stream = true,
+            timeoutSeconds = caskBudget, stream = true, lineFilter = cltDedup,
         )
         bufPrint(caskResult.output, log = false)
         val combined = formulaResult.output + caskResult.output
@@ -156,6 +157,31 @@ private fun RunContext.brewUpgrade(): Int {
     brewSurfacePostInstallFailures(result.output)
     brewSurfaceDeprecationWarnings(result.output)
     return result.exitCode
+}
+
+/**
+ * Line filter keeping only the first "A newer Command Line Tools release is available" block:
+ * brew repeats its ~11 lines before every formula it upgrades (MARSTECH-826). A repeat ends at
+ * its "You should download" line, or at the next "==>" step if brew changes the wording.
+ */
+internal fun cltWarningDedup(): (String) -> Boolean {
+    var seen = false
+    var skipping = false
+    return { line ->
+        when {
+            line.startsWith("Warning: A newer Command Line Tools release is available") -> {
+                skipping = seen
+                seen = true
+                !skipping
+            }
+            !skipping -> true
+            line.startsWith("==>") -> { skipping = false; true }
+            else -> {
+                if (line.startsWith("You should download the Command Line Tools")) skipping = false
+                false
+            }
+        }
+    }
 }
 
 /**

@@ -71,14 +71,16 @@ data class ProcessResult(val exitCode: Int, val output: String)
  * @param timeoutSeconds if set, kills the process tree after the given number of seconds and returns exit code 124.
  * @param stream if true, writes each output line to the log file as it arrives (see [RunContext.logImmediate]);
  *   the caller must then not log [ProcessResult.output] again.
+ * @param lineFilter if set, lines it rejects are left out of both the log and [ProcessResult.output].
  */
 fun RunContext.runCaptured(
     vararg cmd: String,
     workDir: File? = null,
     timeoutSeconds: Long? = null,
     stream: Boolean = false,
+    lineFilter: ((String) -> Boolean)? = null,
 ): ProcessResult =
-    runCatching { runCapturedOrThrow(cmd, workDir, timeoutSeconds, stream) }.getOrElse { e ->
+    runCatching { runCapturedOrThrow(cmd, workDir, timeoutSeconds, stream, lineFilter) }.getOrElse { e ->
         // Same wording as runProcess: marstech-uplink-review greps the log for "Warning: Failed to run"
         val msg = "Warning: Failed to run '${cmd.first()}': ${e.message}"
         if (stream) logImmediate(msg)
@@ -91,9 +93,13 @@ private fun RunContext.runCapturedOrThrow(
     workDir: File?,
     timeoutSeconds: Long?,
     stream: Boolean,
+    lineFilter: ((String) -> Boolean)? = null,
 ): ProcessResult {
     processRunner?.let { runner ->
-        val result = runner.run(cmd.toList(), workDir, timeoutSeconds)
+        val result = runner.run(cmd.toList(), workDir, timeoutSeconds).let { r ->
+            if (lineFilter == null) r
+            else r.copy(output = r.output.split('\n').dropLast(1).filter(lineFilter).joinToString("") { "$it\n" })
+        }
         if (stream) result.output.lineSequence().filter { it.isNotEmpty() }.forEach { logImmediate(it) }
         return result
     }
@@ -106,6 +112,7 @@ private fun RunContext.runCapturedOrThrow(
     val reader = thread(isDaemon = true, name = "uplink-reader-${cmd.first()}") {
         runCatching {
             proc.inputStream.bufferedReader().forEachLine { line ->
+                if (lineFilter?.invoke(line) == false) return@forEachLine
                 out.append(line).append('\n')
                 if (stream) Config.logLine(label, line)
             }

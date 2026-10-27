@@ -339,6 +339,22 @@ class UpdatersTest {
     }
 
     @Test
+    fun `cltWarningDedup keeps only the first Command Line Tools block`() {
+        val block = """
+            Warning: A newer Command Line Tools release is available.
+            Update them from Software Update in System Settings.
+
+              sudo xcode-select --install
+            You should download the Command Line Tools for Xcode 26.3.
+        """.trimIndent()
+        val output = "==> Upgrading a\n$block\n==> Upgrading b\n$block\ndone b\n==> Upgrading c\n" +
+            "Warning: A newer Command Line Tools release is available.\nreworded tail\n==> Upgrading d"
+        val filter = cltWarningDedup()
+        val kept = output.lines().filter(filter)
+        assertEquals(listOf("==> Upgrading a") + block.lines() + listOf("==> Upgrading b", "done b", "==> Upgrading c", "==> Upgrading d"), kept)
+    }
+
+    @Test
     fun `lastBrewStep returns the package brew was on when killed`() {
         val output = """
             ==> Upgrading 3 outdated packages:

@@ -111,8 +111,9 @@ class ProcessRunnerTest {
     fun `cargoUpdate failure is a summary warning`() {
         val (ctx, _) = ctx(
             "cargo",
-            installed = setOf("cargo-install-update"),
             responses = listOf(
+                // not on the PATH (launchd): only 'cargo --list' sees the ~/.cargo/bin plugin
+                listOf("cargo", "--list") to ProcessResult(0, "Installed Commands:\n    install-update\n    install-update-config\n"),
                 listOf("cargo", "install", "--list") to ProcessResult(0, "ripgrep v14.1.0:\n    rg\n"),
                 listOf("cargo", "install-update") to ProcessResult(1, ""),
             ),
