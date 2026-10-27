@@ -2,21 +2,12 @@
 
 macOS system updater — Kotlin/Maven CLI tool compiled to a GraalVM native binary. Manages Homebrew, SDKMAN, npm, and more from a single command.
 
-## Download
+## Install
 
-Pre-built binaries are available on the [GitHub Releases](https://github.com/Alkaphreak/marstech-uplink/releases) page.
-
-```zsh
-# Apple Silicon (M-series)
-curl -sL https://github.com/Alkaphreak/marstech-uplink/releases/latest/download/marstech-uplink-osx-aarch_64.zip \
-  | tar -xz -C ~/.local/bin && chmod +x ~/.local/bin/marstech-uplink
-
-# Intel
-curl -sL https://github.com/Alkaphreak/marstech-uplink/releases/latest/download/marstech-uplink-osx-x86_64.zip \
-  | tar -xz -C ~/.local/bin && chmod +x ~/.local/bin/marstech-uplink
-```
-
-A fat JAR (requires Java 21+) is also attached to each release as `marstech-uplink.jar`.
+No GitHub release is published yet, so there is nothing to download: build and install on the
+target Mac with `./build-install.sh` (see [Install native binary](#install-native-binary)). It
+compiles a binary native to that machine (Intel or Apple Silicon). `--only selfupdate` reports
+"could not check" until a release exists.
 
 ## Requirements
 
@@ -91,9 +82,9 @@ Preferred automated flow (SDKMAN bootstrap + build + install + smoke test):
 | macOS Apple Silicon (M-series) | Intel binary via Rosetta 2 | Fallback | Runs transparently but slower than native |
 
 - The `build-install.sh` script always compiles a binary native to the machine it runs on.
-- GitHub Releases provide both `osx-x86_64` and `osx-aarch_64` pre-built binaries.
-- On Apple Silicon, always prefer the `osx-aarch_64` binary for best performance.
-- The fat JAR (`marstech-uplink.jar`) runs on any platform with Java 21+, but the tool itself only orchestrates macOS-specific commands.
+- `release.yml` is set up to publish `osx-x86_64` and `osx-aarch_64` binaries, but no release has been published yet.
+- On Apple Silicon, always prefer a native `aarch64` build for best performance.
+- The fat JAR (`target/marstech-uplink.jar`, from `mvn package`) runs on any platform with Java 21+, but the tool itself only orchestrates macOS-specific commands.
 
 ## Project structure
 
