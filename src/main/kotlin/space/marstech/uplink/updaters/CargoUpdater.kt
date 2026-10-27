@@ -39,9 +39,11 @@ fun RunContext.cargoUpdate() {
         return
     }
 
-    // 'cargo install-update' is a subcommand provided by the cargo-update crate.
-    // Its binary is registered as 'cargo-install-update' — check for it explicitly.
-    if (!toolPresent("cargo-install-update")) {
+    // 'cargo install-update' is a subcommand provided by the cargo-update crate. Ask cargo, not
+    // 'which': cargo also finds subcommands in ~/.cargo/bin, which launchd leaves off the PATH
+    // (false "not installed" warning under Dixie, MARSTECH-793).
+    val hasInstallUpdate = captureOutput("cargo", "--list")?.lines()?.any { it.trim() == "install-update" } == true
+    if (!hasInstallUpdate) {
         bufPrint("${YELLOW}cargo-update not installed — cannot update cargo packages")
         bufPrint("  Install with: cargo install cargo-update$RESET")
         summaryWarnings += "Cargo: install cargo-update to enable package updates — cargo install cargo-update"
