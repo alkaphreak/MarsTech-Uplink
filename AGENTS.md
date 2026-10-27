@@ -28,6 +28,7 @@
   - record outcomes in `summaryUpdated`, `summarySkipped`, `summaryWarnings`, `summaryFailed`
 - Use `bufPrint(...)` instead of `println(...)` inside updater/backups/pre-flight code; direct prints will break the buffered parallel output model. `bufPrint` also writes every line to the log file in real-time via `logImmediate()`.
 - Use `runProcess`, `runShell`, `captureOutput`, or `runCaptured` from `ProcessUtils.kt` instead of raw `ProcessBuilder` unless you need custom process handling, and `toolPresent(...)` instead of `commandExists(...)` inside updaters: both go through the injectable `RunContext.processRunner` seam that tests fake.
+- Architecture decisions live in `docs/adr/` (MADR; create it from the Marstech-Configs `project-init` template with the first ADR). Read them before changing a design they cover.
 - Keep CLI-facing strings explicit and operational; this tool is closer to an automation script than a domain model.
 
 ## Filesystem and external integration points
