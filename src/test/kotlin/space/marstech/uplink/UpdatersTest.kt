@@ -355,6 +355,16 @@ class UpdatersTest {
     }
 
     @Test
+    fun `cltWarningDedup drops the brew doctor repeat but keeps the warnings after it`() {
+        val block = "Warning: A newer Command Line Tools release is available.\n" +
+            "  sudo xcode-select --install\nYou should download the Command Line Tools for Xcode 26.3."
+        val filter = cltWarningDedup()
+        assertEquals(listOf("==> Upgrading a") + block.lines(), "==> Upgrading a\n$block".lines().filter(filter))
+        val doctor = "Please note\n\n$block\n\nWarning: You are using macOS on Intel x86_64.\nend"
+        assertEquals(listOf("Please note", "", "", "Warning: You are using macOS on Intel x86_64.", "end"), doctor.lines().filter(filter))
+    }
+
+    @Test
     fun `lastBrewStep returns the package brew was on when killed`() {
         val output = """
             ==> Upgrading 3 outdated packages:

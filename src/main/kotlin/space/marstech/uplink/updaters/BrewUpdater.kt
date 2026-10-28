@@ -30,8 +30,9 @@ fun RunContext.brewUpdate() {
     val outdated = captureOutput("brew", "outdated", "--verbose")
     bufPrint(outdated.takeUnless { it.isNullOrBlank() } ?: "All Homebrew packages are up to date")
 
-    brewUpgrade()
-    brewCleanupAndDoctor()
+    val cltDedup = cltWarningDedup()  // shared by upgrades and doctor: one CLT block per run
+    brewUpgrade(cltDedup)
+    brewCleanupAndDoctor(cltDedup)
     brewLinkUnlinkedKegs()
     summaryUpdated += "Homebrew"
 }
@@ -100,7 +101,7 @@ private fun RunContext.handleBrewUpdateFailure(result: ProcessResult) {
  * Formulae first, then casks, sharing the one [BrewConfig.upgradeTimeoutMinutes] budget.
  * Split so `exclude_casks` can leave out casks that would wait on an admin password.
  */
-private fun RunContext.brewUpgrade(): Int {
+private fun RunContext.brewUpgrade(cltDedup: (String) -> Boolean): Int {
     val brewConfig = Config.appConfig.brew
     val budgetSeconds = brewConfig.upgradeTimeoutMinutes * 60L
     val startedAt = System.nanoTime()
@@ -110,7 +111,6 @@ private fun RunContext.brewUpgrade(): Int {
         if (brewConfig.skipBuildFromSource) add("--force-bottle")
     }
     section("Homebrew upgrade — formulae${if (brewConfig.skipBuildFromSource) " (--force-bottle)" else ""}")
-    val cltDedup = cltWarningDedup()  // shared by both upgrades: one CLT block per run
     // Streamed: a long from-source build must show progress in the log, not one burst at the end.
     val formulaResult = runCaptured(*formulaArgs.toTypedArray(), timeoutSeconds = budgetSeconds, stream = true, lineFilter = cltDedup)
     bufPrint(formulaResult.output, log = false)
@@ -161,7 +161,8 @@ private fun RunContext.brewUpgrade(): Int {
 
 /**
  * Line filter keeping only the first "A newer Command Line Tools release is available" block:
- * brew repeats its ~11 lines before every formula it upgrades (MARSTECH-826). A repeat ends at
+ * brew repeats its ~11 lines before every formula it upgrades, and again in 'brew doctor'
+ * (MARSTECH-826). A repeat ends at
  * its "You should download" line, or at the next "==>" step if brew changes the wording.
  */
 internal fun cltWarningDedup(): (String) -> Boolean {
@@ -298,7 +299,7 @@ private fun RunContext.brewSurfaceDeprecationWarnings(output: String) {
         .forEach { formula -> summaryWarnings += "brew deprecated: $formula — consider: brew uninstall $formula" }
 }
 
-private fun RunContext.brewCleanupAndDoctor() {
+private fun RunContext.brewCleanupAndDoctor(cltDedup: (String) -> Boolean) {
     section("Homebrew cleanup")
     val result = runCaptured("brew", "cleanup", "-s", "--prune=all")
     // Filter out individual "Removing:" lines — only keep summary and warnings
@@ -315,7 +316,7 @@ private fun RunContext.brewCleanupAndDoctor() {
 
     // Always run 'brew doctor' — not just on upgrade failures — to surface deprecated packages
     section("Homebrew doctor")
-    val doctorResult = runCaptured("brew", "doctor")
+    val doctorResult = runCaptured("brew", "doctor", lineFilter = cltDedup)
     val doctorOut = doctorResult.output
     // Suppress the "Your system is ready to brew." success line to avoid noise
     val doctorFiltered = doctorOut.lines()
