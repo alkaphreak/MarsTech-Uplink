@@ -82,7 +82,7 @@ Preferred automated flow (SDKMAN bootstrap + build + install + smoke test):
 | macOS Apple Silicon (M-series) | Intel binary via Rosetta 2 | Fallback | Runs transparently but slower than native |
 
 - The `build-install.sh` script always compiles a binary native to the machine it runs on.
-- `release.yml` is set up to publish `osx-x86_64` and `osx-aarch_64` binaries, but no release has been published yet.
+- Each release attaches `marstech-uplink-osx-x86_64.zip`, `marstech-uplink-osx-aarch_64.zip` (the names `selfUpdate()` downloads) and `marstech-uplink.jar`.
 - On Apple Silicon, always prefer a native `aarch64` build for best performance.
 - The fat JAR (`target/marstech-uplink.jar`, from `mvn package`) runs on any platform with Java 21+, but the tool itself only orchestrates macOS-specific commands.
 

@@ -5,8 +5,8 @@
 # Full release     : JRELEASER_GITHUB_TOKEN=<token> mvn jreleaser:full-release
 #
 # Artifacts expected in out/ before running (placed by the GitHub Actions release job):
-#   out/marstech-uplink-osx-x86_64   — native binary, macOS Intel
-#   out/marstech-uplink-osx-aarch_64 — native binary, macOS Apple Silicon
+#   out/marstech-uplink-osx-x86_64.zip   — native binary, macOS Intel
+#   out/marstech-uplink-osx-aarch_64.zip — native binary, macOS Apple Silicon
 #   out/marstech-uplink.jar          — fat JAR (Java 21+ required)
 
 project:
@@ -19,6 +19,7 @@ project:
   authors:
     - Alkaphreak
   license: MIT
+  copyright: "2026 Alkaphreak"
   links:
     homepage: https://github.com/Alkaphreak/marstech-uplink
 
@@ -37,18 +38,10 @@ release:
       hide:
         uncategorized: true
 
-# Native binaries per platform — JReleaser zips each one as
-# marstech-uplink-{version}-{platform}.zip
-distributions:
-  marstech-uplink:
-    type: NATIVE_IMAGE
-    artifacts:
-      - path: "out/marstech-uplink-osx-x86_64"
-        platform: osx-x86_64
-      - path: "out/marstech-uplink-osx-aarch_64"
-        platform: osx-aarch_64
-
-# Fat JAR attached to the release as-is (no wrapping)
+# Attached as-is. selfUpdate() downloads marstech-uplink-osx-<arch>.zip and expects the
+# binary marstech-uplink-osx-<arch> inside it (SelfUpdater.kt): keep these names in sync.
 files:
   artifacts:
+    - path: "out/marstech-uplink-osx-x86_64.zip"
+    - path: "out/marstech-uplink-osx-aarch_64.zip"
     - path: "out/marstech-uplink.jar"
