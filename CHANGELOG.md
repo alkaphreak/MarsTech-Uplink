@@ -9,6 +9,10 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [1.1.0] — 2026-11-03
+
 ### Added
 
 - `Tool` enum (`Tool.kt`) — single source of truth for the `--only` values, the `[tools]` config keys
@@ -52,7 +56,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.0.0] — 2026-05-14
+## [1.0.0] — 2026-05-14 (never tagged: its release run failed on the retired `macos-13` runner)
 
 ### Added
 
@@ -82,5 +86,5 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Maven kapt `Duplicate source root` warning (redundant `<sourceDirs>` removed from `pom.xml`)
 - SDKMAN bootstrap in `build-install.sh` — `auto_env` cd-hook race fixed
 
-[Unreleased]: https://github.com/Alkaphreak/marstech-uplink/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/Alkaphreak/marstech-uplink/releases/tag/v1.0.0
+[Unreleased]: https://github.com/Alkaphreak/marstech-uplink/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Alkaphreak/marstech-uplink/releases/tag/v1.1.0

@@ -77,7 +77,7 @@ Preferred automated flow (SDKMAN bootstrap + build + install + smoke test):
 
 | Platform          | Binary type       | Status       | Notes                                      |
 |-------------------|-------------------|--------------|--------------------------------------------|
-| macOS Intel x86_64 | Native (x86_64)  | Supported    | Built on `macos-13` GitHub runner          |
+| macOS Intel x86_64 | Native (x86_64)  | Supported    | Built on `macos-15-intel` GitHub runner    |
 | macOS Apple Silicon (M-series) | Native (aarch64) | Supported | Built on `macos-latest` (ARM64) GitHub runner |
 | macOS Apple Silicon (M-series) | Intel binary via Rosetta 2 | Fallback | Runs transparently but slower than native |
 
