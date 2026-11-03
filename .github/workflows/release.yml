@@ -125,8 +125,11 @@ jobs:
           name: jar
           path: out
 
-      - name: Make binaries executable
-        run: chmod +x out/marstech-uplink-osx-*
+      - name: Zip native binaries (selfUpdate downloads marstech-uplink-osx-<arch>.zip)
+        run: |
+          chmod +x out/marstech-uplink-osx-*
+          cd out
+          for a in x86_64 aarch_64; do zip -j "marstech-uplink-osx-$a.zip" "marstech-uplink-osx-$a"; done
 
       - name: Dry-run check
         env:
@@ -145,6 +148,10 @@ jobs:
           mvn versions:set -DnewVersion=${NEXT} -DgenerateBackupPoms=false
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet pom.xml; then
+            echo "main already at ${NEXT}, nothing to bump"
+            exit 0
+          fi
           git add pom.xml
           git commit -m "chore: bump to ${NEXT} [skip ci]"
           git push

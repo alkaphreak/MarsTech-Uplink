@@ -184,6 +184,10 @@
                 <groupId>org.jreleaser</groupId>
                 <artifactId>jreleaser-maven-plugin</artifactId>
                 <version>1.15.0</version>
+                <configuration>
+                    <!-- Without this the plugin ignores jreleaser.yml and publishes a release with no assets (MARSTECH-834) -->
+                    <configFile>${project.basedir}/jreleaser.yml</configFile>
+                </configuration>
             </plugin>
         </plugins>
     </build>
