@@ -241,11 +241,19 @@ internal fun lastBrewStep(output: String): String? {
  *   "Error: podman: An unsatisfied requirement failed this build."
  *   "Error: antigravity: It seems the App source '/Applications/Antigravity.app' is not there."
  * into summaryWarnings, so they aren't left buried in raw log output.
+ * A reason ending in "Here's the output:" gets the cause lines brew prints after it (MARSTECH-874).
  */
 internal fun RunContext.brewSurfacePostInstallFailures(output: String) {
     val pattern = Regex("""^Error: ([\w@.-]+): (.+)$""")
-    output.lines()
-        .mapNotNull { pattern.find(it.trim())?.groupValues }
+    val stop = Regex("""^(Error:|Warning:|==>)""")
+    val lines = output.lines().map { it.trim() }
+    lines.withIndex()
+        .mapNotNull { (i, line) ->
+            val (_, name, reason) = pattern.find(line)?.groupValues ?: return@mapNotNull null
+            val cause = if (!reason.endsWith("output:")) "" else
+                lines.drop(i + 1).takeWhile { !stop.containsMatchIn(it) }.filter { it.isNotEmpty() }.distinct().joinToString(" / ")
+            Triple(line, name, if (cause.isEmpty()) reason else "$reason $cause")
+        }
         .filter { (_, name, _) -> name != "Problems with multiple casks" }
         .distinct()
         .forEach { (_, name, reason) ->

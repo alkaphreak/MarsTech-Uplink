@@ -224,6 +224,24 @@ class UpdatersTest {
     }
 
     @Test
+    fun `brewSurfacePostInstallFailures keeps the cause printed after Here's the output (MARSTECH-874)`() {
+        val ctx = dryCtx()
+        ctx.brewSurfacePostInstallFailures("""
+            Error: proton-mail: Failure while executing; `/usr/bin/sudo -E -- /bin/rm` exited with 1. Here's the output:
+            sudo: a terminal is required to read the password
+            sudo: a password is required
+            ==> Purging files for version 1.16.0 of Cask proton-mail
+            Error: podman: An unsatisfied requirement failed this build.
+            sudo: unrelated line
+        """.trimIndent())
+        assertEquals(listOf(
+            "brew: 'proton-mail' failed — Failure while executing; `/usr/bin/sudo -E -- /bin/rm` exited with 1. Here's the output: " +
+                "sudo: a terminal is required to read the password / sudo: a password is required",
+            "brew: 'podman' failed — An unsatisfied requirement failed this build.",
+        ), ctx.summaryWarnings.toList())
+    }
+
+    @Test
     fun `parseBrewFailedCasks returns empty list when no Problems block`() {
         val result = parseBrewFailedCasks("brew upgrade --greedy\nAll good.")
         assertTrue(result.isEmpty())
