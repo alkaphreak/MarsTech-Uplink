@@ -5,6 +5,8 @@ import space.marstech.uplink.updaters.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
+private const val SUDO_HINT = " — needs sudo: add it to exclude_casks in config.toml or upgrade it by hand"
+
 /**
  * Smoke-level tests for all updater functions.
  * Updaters are called in dry-run mode with toolsPresent pre-populated and a
@@ -236,8 +238,34 @@ class UpdatersTest {
         """.trimIndent())
         assertEquals(listOf(
             "brew: 'proton-mail' failed — Failure while executing; `/usr/bin/sudo -E -- /bin/rm` exited with 1. Here's the output: " +
-                "sudo: a terminal is required to read the password / sudo: a password is required",
+                "sudo: a terminal is required to read the password / sudo: a password is required" + SUDO_HINT,
             "brew: 'podman' failed — An unsatisfied requirement failed this build.",
+        ), ctx.summaryWarnings.toList())
+    }
+
+    @Test
+    fun `brewSurfacePostInstallFailures points a HOMEBREW_NO_SUDO failure to exclude_casks (MARSTECH-884)`() {
+        val ctx = dryCtx()
+        ctx.brewSurfacePostInstallFailures("""
+            Error: proton-mail: Failure while executing; `/bin/rm -r -f -- /Applications/Proton Mail Uninstaller.app` exited with 1. Here's the output:
+            sudo is disabled by HOMEBREW_NO_SUDO.
+        """.trimIndent())
+        assertEquals(listOf(
+            "brew: 'proton-mail' failed — Failure while executing; `/bin/rm -r -f -- /Applications/Proton Mail Uninstaller.app` " +
+                "exited with 1. Here's the output: sudo is disabled by HOMEBREW_NO_SUDO." + SUDO_HINT,
+        ), ctx.summaryWarnings.toList())
+    }
+
+    @Test
+    fun `brewSurfacePostInstallFailures hints a one-line pkg sudo error, not a pseudo word (MARSTECH-884)`() {
+        val ctx = dryCtx()
+        ctx.brewSurfacePostInstallFailures("""
+            Error: some-pkg: The pkg artifact requires sudo, but HOMEBREW_NO_SUDO is set.
+            Error: foo: pseudo-terminal allocation failed
+        """.trimIndent())
+        assertEquals(listOf(
+            "brew: 'some-pkg' failed — The pkg artifact requires sudo, but HOMEBREW_NO_SUDO is set." + SUDO_HINT,
+            "brew: 'foo' failed — pseudo-terminal allocation failed",
         ), ctx.summaryWarnings.toList())
     }
 

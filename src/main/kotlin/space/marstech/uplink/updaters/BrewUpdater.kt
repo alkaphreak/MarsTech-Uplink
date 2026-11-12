@@ -127,8 +127,12 @@ private fun RunContext.brewUpgrade(cltDedup: (String) -> Boolean): Int {
         val caskBudget = remaining()
         if (caskBudget <= 0) return brewUpgradeTimedOut(formulaResult.output, casks = false)  // 'brew outdated' spent the rest
         section("Homebrew upgrade — casks (--greedy)")
+        // HOMEBREW_NO_SUDO: a cask step needing sudo fails at once instead of waiting on a password
+        // prompt when a terminal is attached (5h43 hang on proton-mail, MARSTECH-884). Applies to manual
+        // runs too: such casks surface in the summary for a hand upgrade. Side effect: brew skips a cask's
+        // system-domain launchctl services on uninstall without an error.
         val caskResult = runCaptured(
-            "brew", "upgrade", "--cask", "--greedy", *casks.toTypedArray(),
+            "env", "HOMEBREW_NO_SUDO=1", "brew", "upgrade", "--cask", "--greedy", *casks.toTypedArray(),
             timeoutSeconds = caskBudget, stream = true, lineFilter = cltDedup,
         )
         bufPrint(caskResult.output, log = false)
@@ -236,6 +240,8 @@ internal fun lastBrewStep(output: String): String? {
     return output.lines().asReversed().firstNotNullOfOrNull { step.find(it.trim())?.groupValues?.get(1) }
 }
 
+private val SUDO_WORD = Regex("""\bsudo\b""", RegexOption.IGNORE_CASE)
+
 /**
  * Surfaces per-formula/cask failures such as:
  *   "Error: podman: An unsatisfied requirement failed this build."
@@ -252,7 +258,10 @@ internal fun RunContext.brewSurfacePostInstallFailures(output: String) {
             val (_, name, reason) = pattern.find(line)?.groupValues ?: return@mapNotNull null
             val cause = if (!reason.endsWith("output:")) "" else
                 lines.drop(i + 1).takeWhile { !stop.containsMatchIn(it) }.filter { it.isNotEmpty() }.distinct().joinToString(" / ")
-            Triple(line, name, if (cause.isEmpty()) reason else "$reason $cause")
+            val full = if (cause.isEmpty()) reason else "$reason $cause"
+            val hint = if (SUDO_WORD.containsMatchIn(full))
+                " — needs sudo: add it to exclude_casks in config.toml or upgrade it by hand" else ""
+            Triple(line, name, full + hint)
         }
         .filter { (_, name, _) -> name != "Problems with multiple casks" }
         .distinct()
