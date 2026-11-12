@@ -11,6 +11,22 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.1] — 2026-11-12
+
+### Fixed
+
+- Cask upgrade runs under `HOMEBREW_NO_SUDO=1`: a cask step needing sudo fails at once instead of
+  waiting on a password prompt in a terminal run (5h43 hang on proton-mail); a failure mentioning sudo
+  gets an `exclude_casks` hint in the summary (MARSTECH-884)
+- Failure warnings keep the cause lines brew prints after "Here's the output:" (MARSTECH-874)
+- Release publishes the zipped binaries `selfUpdate` expects (MARSTECH-834)
+
+### Changed
+
+- `.gitignore` ignores Claude Code local files (MARSTECH-878)
+
+---
+
 ## [1.1.0] — 2026-11-03
 
 ### Added
