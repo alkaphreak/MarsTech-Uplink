@@ -9,6 +9,10 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [1.1.2] — 2026-11-16
+
 ### Fixed
 
 - The NPM phase always runs after brew, so a node upgrade no longer relinks the keg over the npm that
