@@ -208,10 +208,12 @@ class MacUpdateCommand : Callable<Int> {
     private fun buildUpdateFutures(ctx: RunContext, executor: Executor): List<CompletableFuture<Void>> =
         buildList {
             val brewFuture = addBrewAndCodex(ctx, executor)
-            // npm missing at probe time: brew may relink the node keg (MARSTECH-747). The npm task then starts
-            // only once brew is done, so it parks no thread and its Timings entry measures npm, not the wait.
-            val npmExecutor = if (brewFuture != null && !ctx.toolPresent("npm")) executor.after(brewFuture) else executor
-            // Same for cargo and the rust keg (MARSTECH-793).
+            // npm always runs after the brew+codex task: a node upgrade relinks the keg and overwrites the npm that
+            // `npm install -g npm@latest` just installed (MARSTECH-903), and an unlinked keg hides npm from the
+            // early probe (MARSTECH-747). The npm task starts only once brew is done, so it parks no thread and
+            // its Timings entry measures npm, not the wait.
+            val npmExecutor = if (brewFuture != null) executor.after(brewFuture) else executor
+            // cargo waits only when missing at probe time: brew may relink the rust keg (MARSTECH-793).
             val cargoExecutor = if (brewFuture != null && !ctx.toolPresent("cargo")) executor.after(brewFuture) else executor
             launchIf(ctx, Tool.SDKMAN,  executor, ctx::sdkmanUpdate)
             launchIf(ctx, Tool.UV,      executor, ctx::uvUpdate)

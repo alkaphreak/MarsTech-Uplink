@@ -9,7 +9,8 @@ import space.marstech.uplink.section
 import java.util.concurrent.Future
 
 /**
- * Runs [npmUpdate], or re-probes after brew when npm is missing at tool-detection time:
+ * Runs [npmUpdate] (Main.kt schedules it after brew, MARSTECH-903), re-probing first when npm
+ * is missing at tool-detection time:
  * brew relinks unlinked kegs (node included) at the end of its task, so the early probe can
  * miss an installed npm (MARSTECH-747). A still-missing npm is a summary warning, not a silent skip.
  */

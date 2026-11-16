@@ -9,6 +9,12 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The NPM phase always runs after brew, so a node upgrade no longer relinks the keg over the npm that
+  `npm install -g npm@latest` just installed. A run now takes about as long as the npm phase more,
+  since npm no longer overlaps brew (MARSTECH-903)
+
 ---
 
 ## [1.1.1] — 2026-11-12
