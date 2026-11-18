@@ -365,6 +365,19 @@ class UpdatersTest {
         assertTrue(compareVersions("1.1.0", "1.0.0-SNAPSHOT") > 0)
     }
 
+    @Test
+    fun `a release outranks the snapshot of the same number`() {
+        assertTrue(compareVersions("1.2.0", "1.2.0-SNAPSHOT") > 0)
+        assertTrue(compareVersions("1.2.0-SNAPSHOT", "1.2.0") < 0)
+        assertEquals(0, compareVersions("1.2.0-SNAPSHOT", "1.2.0-SNAPSHOT"))
+    }
+
+    @Test
+    fun `a kept snapshot build is flagged, a release build is not`() {
+        assertTrue(snapshotWarning("1.2.0-SNAPSHOT", "1.1.2")!!.contains("1.2.0-SNAPSHOT"))
+        assertEquals(null, snapshotWarning("1.1.2", "1.1.2"))
+    }
+
     // -------------------------------------------------------------------------
     // brew cask exclusions (MARSTECH-782)
     // -------------------------------------------------------------------------

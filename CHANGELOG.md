@@ -9,6 +9,14 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A local `-SNAPSHOT` build that outranks the latest release is still kept, but now raises a run
+  warning instead of "already at the latest version": its version says nothing about the fixes it
+  carries (the Air stayed on 1.2.0-SNAPSHOT without the MARSTECH-903 fix)
+- Self-update installs release X.Y.Z over a local X.Y.Z-SNAPSHOT build: the qualifier used to be
+  dropped, so both compared equal and the release was never installed
+
 ---
 
 ## [1.1.2] — 2026-11-16
