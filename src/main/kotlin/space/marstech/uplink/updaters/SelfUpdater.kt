@@ -43,6 +43,11 @@ fun RunContext.selfUpdate() {
     bufPrint("Latest release  : $latestVersion ($latestTag)")
 
     if (compareVersions(latestVersion, Config.UPLINK_VERSION) <= 0) {
+        snapshotWarning(Config.UPLINK_VERSION, latestVersion)?.let {
+            bufPrint("$YELLOW$it$RESET")
+            summaryWarnings += it
+            return
+        }
         bufPrint("marstech-uplink is already at the latest version")
         summarySkipped += "marstech-uplink self-update (already at ${Config.UPLINK_VERSION})"
         return
@@ -146,16 +151,29 @@ private fun RunContext.fetchLatestReleaseTag(): String? {
 }
 
 /**
+ * A local SNAPSHOT build that outranks the latest release is kept (it may be a deliberate test
+ * build), but its version says nothing about which fixes it carries: 1.2.0-SNAPSHOT built before
+ * a fix outranks the 1.1.2 release that ships it. Surface it in the run recap instead of
+ * reporting "up to date".
+ */
+internal fun snapshotWarning(current: String, latest: String): String? =
+    if (current.endsWith("-SNAPSHOT"))
+        "marstech-uplink: local build $current is kept, the latest release $latest is not installed " +
+            "over it; reinstall release $latest unless this test build is deliberate"
+    else null
+
+/**
  * Compares two dotted version strings (e.g. "1.2.3" vs "1.3.0").
  * Returns positive when [a] > [b], negative when [a] < [b], 0 when equal.
  */
 internal fun compareVersions(a: String, b: String): Int {
-    val aParts = a.split(".").mapNotNull { it.toIntOrNull() }
-    val bParts = b.split(".").mapNotNull { it.toIntOrNull() }
+    val aParts = a.substringBefore('-').split(".").mapNotNull { it.toIntOrNull() }
+    val bParts = b.substringBefore('-').split(".").mapNotNull { it.toIntOrNull() }
     val maxLen = maxOf(aParts.size, bParts.size)
     for (i in 0 until maxLen) {
         val diff = aParts.getOrElse(i) { 0 } - bParts.getOrElse(i) { 0 }
         if (diff != 0) return diff
     }
-    return 0
+    // Same number: the release outranks its pre-release (1.2.0 > 1.2.0-SNAPSHOT), as in Maven.
+    return (if ('-' in b) 1 else 0) - (if ('-' in a) 1 else 0)
 }
