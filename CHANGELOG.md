@@ -9,6 +9,10 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [1.1.3] — 2026-11-18
+
 ### Fixed
 
 - A local `-SNAPSHOT` build that outranks the latest release is still kept, but now raises a run
