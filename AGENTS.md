@@ -66,3 +66,5 @@
 - Config paths in `AppConfig` default to generic placeholders (`~/KeeWeb/…`, `~/MyWorkspace/…`); the real paths are user-defined in `config.toml`.
 - `macosUpdate()` dry-run still calls `softwareupdate --list` for real runs; tests avoid it via the fake runner (it used to emit a `Corrupted channel` warning in `target/surefire-reports/*.dumpstream`).
 - Ignore `target/` for source edits; the real implementation lives only under `src/main/kotlin` and `src/test/kotlin`.
+- The log strips ANSI codes (`Config.logLine`), so a log excerpt used as a test fixture lacks the colours the real command prints: SDKMAN colours its `Stop!` lines even without a TTY. Match tool output on `Config.stripAnsi(line)` and feed coloured text to the test (MARSTECH-944: a plain-text fixture passed while the fix missed every real line).
+- Release: commit the CHANGELOG section on `main` before dispatching `release.yml` (the tag lands on `main` HEAD), then download the published `osx-x86_64` zip and run `--version` and `--dry-run --only <tool>` before letting self-update install it: the workflow never runs the native Intel binary, and self-update replaces the installed one with no backup.
