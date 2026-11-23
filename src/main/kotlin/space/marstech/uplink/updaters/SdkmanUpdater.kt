@@ -2,6 +2,7 @@ package space.marstech.uplink.updaters
 
 import space.marstech.uplink.Config
 import space.marstech.uplink.RunContext
+import space.marstech.uplink.runCaptured
 import space.marstech.uplink.runShell
 import space.marstech.uplink.section
 import java.io.File
@@ -51,13 +52,19 @@ fun RunContext.sdkmanUpdate() {
     }
 
     section("SDKMAN upgrade")
-    if (runShell("$init && (printf 'y\\n' | sdk upgrade || true)", sdkmanShell) != 0) {
+    // Captured, not runShell: `|| true` hides a failed install, only its "Stop!" line tells (MARSTECH-944)
+    val upgrade = runCaptured(sdkmanShell, "-c", "$init && (printf 'y\\n' | sdk upgrade || true)", stream = true)
+    bufPrint(upgrade.output.trimEnd(), log = false)
+    if (upgrade.exitCode != 0) {
         bufPrint("Warning: sdk upgrade failed")
         summaryWarnings += "sdk upgrade failed"
     }
+    // SDKMAN colours its Stop! lines even without a TTY (sdkman_colour_enable)
+    val stops = upgrade.output.lineSequence().map { Config.stripAnsi(it).trim() }.filter { it.startsWith("Stop!") }.toList()
+    stops.forEach { summaryWarnings += "SDKMAN: $it" }
 
     section("SDKMAN flush")
     runShell("$init && sdk flush archives && sdk flush temp", sdkmanShell)
 
-    summaryUpdated += "SDKMAN"
+    if (stops.isEmpty()) summaryUpdated += "SDKMAN"
 }

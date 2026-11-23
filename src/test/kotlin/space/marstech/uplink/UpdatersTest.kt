@@ -65,6 +65,26 @@ class UpdatersTest {
         assertTrue(handled, "Expected SDKMAN summary entry")
     }
 
+    @Test
+    fun `sdkmanUpdate surfaces a Stop! line as a warning, not Updated (MARSTECH-944)`() {
+        // Writes a fake sdkman-init.sh: only under surefire's HOME, never the real ~/.sdkman (IDE run)
+        org.junit.jupiter.api.Assumptions.assumeTrue(Config.HOME.contains("/target/test-home"))
+        val init = java.io.File(Config.HOME, ".sdkman/bin/sdkman-init.sh").apply { parentFile.mkdirs(); writeText("") }
+        try {
+            // Real SDKMAN output is coloured (__sdkman_echo_red), even with no TTY
+            val stop = "java (local: 21.0.13.0+9-tem, 25.0.5.0+8-tem; default: 25.0.5.1+2-tem)\n" +
+                "\u001B[1;31mStop! java 25.0.5.1+2-tem is not available. Possible causes:\u001B[0m\n" +
+                "\u001B[1;31m * java binaries are incompatible with your platform\u001B[0m\n"
+            val ctx = RunContext(processRunner = FakeProcessRunner(responses = listOf(listOf("zsh") to ProcessResult(0, stop))))
+            ctx.toolsPresent = mapOf("zsh" to true)
+            ctx.sdkmanUpdate()
+            assertEquals(listOf("SDKMAN: Stop! java 25.0.5.1+2-tem is not available. Possible causes:"), ctx.summaryWarnings.toList())
+            assertFalse(ctx.summaryUpdated.contains("SDKMAN"))
+        } finally {
+            init.delete()
+        }
+    }
+
     // -------------------------------------------------------------------------
     // npmUpdate
     // -------------------------------------------------------------------------
