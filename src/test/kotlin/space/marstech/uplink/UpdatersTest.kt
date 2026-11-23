@@ -85,6 +85,22 @@ class UpdatersTest {
         }
     }
 
+    @Test
+    fun `sdkmanUpdate leaves SDKMAN out of Updated when sdk selfupdate fails (MARSTECH-944)`() {
+        org.junit.jupiter.api.Assumptions.assumeTrue(Config.HOME.contains("/target/test-home"))
+        val init = java.io.File(Config.HOME, ".sdkman/bin/sdkman-init.sh").apply { parentFile.mkdirs(); writeText("") }
+        try {
+            val selfupdate = listOf("zsh", "-c", """. "${init.path}" && sdk selfupdate""")
+            val ctx = RunContext(processRunner = FakeProcessRunner(responses = listOf(selfupdate to ProcessResult(1, ""))))
+            ctx.toolsPresent = mapOf("zsh" to true)
+            ctx.sdkmanUpdate()
+            assertEquals(listOf("sdk selfupdate failed"), ctx.summaryWarnings.toList())
+            assertFalse(ctx.summaryUpdated.contains("SDKMAN"))
+        } finally {
+            init.delete()
+        }
+    }
+
     // -------------------------------------------------------------------------
     // npmUpdate
     // -------------------------------------------------------------------------

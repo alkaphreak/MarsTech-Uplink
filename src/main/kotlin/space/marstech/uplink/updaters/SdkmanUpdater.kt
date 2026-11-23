@@ -39,16 +39,21 @@ fun RunContext.sdkmanUpdate() {
 
     val init = """. "${Config.HOME}/.sdkman/bin/sdkman-init.sh""""
 
+    // Any failure keeps SDKMAN out of Updated (MARSTECH-944); summaryWarnings is shared by parallel tasks, so a local flag
+    var failed = false
+
     section("SDKMAN selfupdate")
     if (runShell("$init && sdk selfupdate", sdkmanShell) != 0) {
         bufPrint("Warning: sdk selfupdate failed")
         summaryWarnings += "sdk selfupdate failed"
+        failed = true
     }
 
     section("SDKMAN update")
     if (runShell("$init && sdk update", sdkmanShell) != 0) {
         bufPrint("Warning: sdk update failed")
         summaryWarnings += "sdk update failed"
+        failed = true
     }
 
     section("SDKMAN upgrade")
@@ -58,6 +63,7 @@ fun RunContext.sdkmanUpdate() {
     if (upgrade.exitCode != 0) {
         bufPrint("Warning: sdk upgrade failed")
         summaryWarnings += "sdk upgrade failed"
+        failed = true
     }
     // SDKMAN colours its Stop! lines even without a TTY (sdkman_colour_enable)
     val stops = upgrade.output.lineSequence().map { Config.stripAnsi(it).trim() }.filter { it.startsWith("Stop!") }.toList()
@@ -66,5 +72,5 @@ fun RunContext.sdkmanUpdate() {
     section("SDKMAN flush")
     runShell("$init && sdk flush archives && sdk flush temp", sdkmanShell)
 
-    if (stops.isEmpty()) summaryUpdated += "SDKMAN"
+    if (!failed && stops.isEmpty()) summaryUpdated += "SDKMAN"
 }

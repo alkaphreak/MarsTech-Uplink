@@ -11,6 +11,15 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.5] — 2026-11-23
+
+### Fixed
+
+- A failed `sdk selfupdate`, `sdk update` or `sdk upgrade` also keeps SDKMAN out of `Updated:`,
+  not only a `Stop!` line: the warning and the Updated entry used to show together (MARSTECH-944)
+
+---
+
 ## [1.1.4] — 2026-11-23
 
 ### Fixed
