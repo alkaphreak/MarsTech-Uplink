@@ -11,6 +11,16 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.4] — 2026-11-23
+
+### Fixed
+
+- A failed SDKMAN install (`Stop! java X is not available`) now raises a run warning, and SDKMAN
+  is no longer listed under `Updated:`: the `sdk upgrade` output was never read, so the failure
+  went unreported (MARSTECH-944)
+
+---
+
 ## [1.1.3] — 2026-11-18
 
 ### Fixed
